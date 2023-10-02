@@ -1,0 +1,19 @@
+# 'descriptor_encoder_params':
+#   'cnn_params':
+#     'input_dim': 3
+#     'output_dims': [32, 64, 128, 256, 256]
+#     'dropouts': [False, True, True, False, False]
+#     'kernel_sizes': [4, 4, 4, 4, 4]
+#     'strides': [2, 2, 2, 2, 2]
+#     'paddings': [1, 1, 1, 1, 0]
+#     'norm': "instance" 
+
+'gnn_params':
+  'layers': ['self', 'cross']
+  'num_layer_reps': 6
+  'd_model': 512
+  'num_heads': 8
+  'norm': "instance"
+
+'sinkhorn_iterations': 100
+

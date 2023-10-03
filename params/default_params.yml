@@ -10,7 +10,7 @@
 
 'gnn_params':
   'layers': ['self', 'cross']
-  'num_layer_reps': 6
+  'num_layer_reps': 9
   'd_model': 512
   'num_heads': 8
   'norm': "instance"

@@ -12,6 +12,8 @@ from detectron2.structures import Boxes
 #https://github.com/pupil-labs/apriltags
 from pupil_apriltags import Detector as AprilTagDetector
 
+#TODO augment we are missing from original is rand_remove_assoc because we do not have that concept
+
 SEG_MODEL_PATH='/home/frc-ag-3/harry_ws/fruitlet_2023/labelling/segmentation/turk/mask_rcnn/mask_best.pth'
 DUMP_DIR='/home/frc-ag-3/harry_ws/fruitlet_2023/scripts/inhand/fruitlet_association/datasets/DUMMY'
 
@@ -88,7 +90,11 @@ def get_basenames(joint_basenmane):
 
 def get_boxes(annotations, segmentations, augment, 
               width, height, resize, file_id, 
-              max_shift=5):
+              score_thresh,
+              max_shift=5,
+              drop_prob=[0.5, 0.1, 0.2], #prob of dropping any, if we drop min, if we drop max
+              score_shift=0.03
+              ):
     
     out_boxes = []
     is_tags = []
@@ -128,8 +134,27 @@ def get_boxes(annotations, segmentations, augment,
         assoc_id = annotation["assoc_id"]
         det_id = annotation["orig_index"]
 
-        #augment by shifting boxes
+        #if score is less than score thresh drop
+        #should not happen as using same score thresh but
+        #adding in if I want to
+        if score < score_thresh:
+            continue
+
         if augment:
+            #first see if we drop
+            if np.random.uniform() < drop_prob[0]:
+                if np.random.uniform() < np.random.uniform(drop_prob[1], drop_prob[2]):
+                    continue
+
+            #second randomly adjust score if not tag
+            if not is_tag:
+                score += np.random.uniform(-score_shift, score_shift)
+                if score < score_thresh:
+                    score = score_thresh
+                if score > 0.99:
+                    score = 0.99
+
+            #thid augment by shifting boxes
             shifts = np.random.randint(-max_shift, max_shift + 1, size=(4,))
             x0 = x0 + shifts[0]
             x1 = x1 + shifts[1]
@@ -256,6 +281,27 @@ def get_assoc_matrix(assoc_dict_0, assoc_dict_1, basename):
 
     return match_matrix, mask_matrix
 
+def rand_flip(descs_0, descs_1, kpts_0, kpts_1):
+    rand_var = np.random.uniform()
+    if rand_var < 0.5:
+        #box descriptors we fliplr
+        descs_0 = torch.fliplr(descs_0)
+        descs_1 = torch.fliplr(descs_1)
+
+        #keypoints for rows unaffected
+
+        #keypoints, for columns we normally would do width - x ...
+        #BUT because cols are between -1 and 1, we just negate it
+        kpts_0[:, 1, :, :] = -kpts_0[:, 1, :, :]
+        kpts_1[:, 1, :, :] = -kpts_1[:, 1, :, :]
+
+        #box segmentations are also flipped left and right
+        kpts_0[:, 2:3] = torch.fliplr(kpts_0[:, 2:3])
+        kpts_1[:, 2:3] = torch.fliplr(kpts_1[:, 2:3])
+
+    return descs_0, descs_1, kpts_0, kpts_1
+
+
 class AssociationDataset(Dataset):
     def __init__(self, annotatons_dir, segmentations_dir, augment,
                  width=1440, height=1080, resize_size=64, score_thresh=0.4,
@@ -276,6 +322,7 @@ class AssociationDataset(Dataset):
         self.feature_predictor = FeaturePredictor(cfg).to(self.device)
         self.feature_predictor.eval()
 
+        self.score_thresh = score_thresh
         self.feature_dict = dict()
 
     def __len__(self):
@@ -310,16 +357,20 @@ class AssociationDataset(Dataset):
 
         boxes_0, is_tags_0, keypoint_vecs_0, scores_0, detection_indeces_0, gt_centers_0, assoc_dict_0 = get_boxes(annotations_0, segmentations_0, self.augment, 
                                                                                                          self.width, self.height, 
-                                                                                                         self.resize, basename_0)
+                                                                                                         self.resize, basename_0, self.score_thresh)
         boxes_1, is_tags_1, keypoint_vecs_1, scores_1, detection_indeces_1, gt_centers_1, assoc_dict_1 = get_boxes(annotations_1, segmentations_1, self.augment, 
                                                                                                          self.width, self.height, 
-                                                                                                         self.resize, basename_1)
+                                                                                                         self.resize, basename_1, self.score_thresh)
         box_features_0 = get_feature_vecs(boxes_0, image_0_path, self.feature_predictor, self.device, self.feature_dict) 
         box_features_1 = get_feature_vecs(boxes_1, image_1_path, self.feature_predictor, self.device, self.feature_dict) 
 
         match_matrix, _ = get_assoc_matrix(assoc_dict_0, assoc_dict_1, os.path.basename(annotation_path))
         match_matrix = torch.from_numpy(match_matrix).float()
         #mask_matrix = torch.from_numpy(mask_matrix).float()
+
+        if self.augment:
+            #random flip
+            box_features_0, box_features_1, keypoint_vecs_0, keypoint_vecs_1 = rand_flip(box_features_0, box_features_1, keypoint_vecs_0, keypoint_vecs_1)
 
         box_features = (box_features_0.to(self.device), box_features_1.to(self.device))
         keypoint_vecs = (keypoint_vecs_0.to(self.device), keypoint_vecs_1.to(self.device))

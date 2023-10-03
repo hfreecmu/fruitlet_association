@@ -32,8 +32,8 @@ def train(opt):
     #
 
     #get optimizer
-    # optimizer = optim.Adam(model.parameters(), opt.lr, weight_decay=opt.weight_decay)
-    optimizer = optim.Adam(model.parameters(), opt.lr)
+    optimizer = optim.Adam(model.parameters(), opt.lr, weight_decay=opt.weight_decay)
+    #optimizer = optim.Adam(model.parameters(), opt.lr)
     scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=opt.milestones, gamma=opt.gamma)
     #
 
@@ -138,11 +138,11 @@ def parse_args():
     parser.add_argument('--checkpoint_dir', default='./checkpoints')
 
     parser.add_argument('--num_epochs', type=int, default=100)
-    parser.add_argument('--milestones', type=list, default=[1000])
+    parser.add_argument('--milestones', type=list, default=[40, 80])
     parser.add_argument('--batch_size', type=int, default=8)
     parser.add_argument('--lr', type=float, default=5e-5)
-    parser.add_argument('--weight_decay', type=float, default=5e-5)
-    parser.add_argument('--gamma', type=float, default=0.25)
+    parser.add_argument('--weight_decay', type=float, default=1e-6)
+    parser.add_argument('--gamma', type=float, default=0.1)
 
     parser.add_argument('--log_steps', type=int, default=10)
     parser.add_argument('--match_thresh', type=float, default=0.5)

@@ -53,10 +53,10 @@ def train(opt):
             loss = []
             optimizer.zero_grad()
             for data_num in range(len(data)):
-                box_features, keypoint_vecs, is_tags, scores, gt_matrices, _ = data[data_num][0]
+                _, keypoint_vecs, is_tags, scores, gt_matrices, _ = data[data_num][0]
                 match_matrix = gt_matrices[0]
 
-                match_scores = model(box_features, keypoint_vecs, is_tags, scores)
+                match_scores = model(None, keypoint_vecs, is_tags, scores)
 
                 assoc_loss = get_loss(match_scores, match_matrix)
 
@@ -93,10 +93,10 @@ def train(opt):
                     if not len(data) == 1:
                         raise RuntimeError('Only batch size 1 supported validate')
                     
-                    box_features, keypoint_vecs, is_tags, scores, gt_matrices, _ = data[0][0]
+                    _, keypoint_vecs, is_tags, scores, gt_matrices, _ = data[0][0]
                     match_matrix = gt_matrices[0]
 
-                    match_scores = model(box_features, keypoint_vecs, is_tags, scores)
+                    match_scores = model(None, keypoint_vecs, is_tags, scores)
 
                     val_loss = get_loss(match_scores, match_matrix)
 

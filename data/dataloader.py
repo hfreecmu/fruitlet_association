@@ -285,8 +285,8 @@ def rand_flip(descs_0, descs_1, kpts_0, kpts_1):
     rand_var = np.random.uniform()
     if rand_var < 0.5:
         #box descriptors we fliplr
-        descs_0 = torch.fliplr(descs_0)
-        descs_1 = torch.fliplr(descs_1)
+        #descs_0 = torch.fliplr(descs_0)
+        #descs_1 = torch.fliplr(descs_1)
 
         #keypoints for rows unaffected
 
@@ -299,7 +299,7 @@ def rand_flip(descs_0, descs_1, kpts_0, kpts_1):
         kpts_0[:, 2:3] = torch.fliplr(kpts_0[:, 2:3])
         kpts_1[:, 2:3] = torch.fliplr(kpts_1[:, 2:3])
 
-    return descs_0, descs_1, kpts_0, kpts_1
+    return None, None, kpts_0, kpts_1
 
 
 class AssociationDataset(Dataset):
@@ -355,14 +355,14 @@ class AssociationDataset(Dataset):
         annotations_0, segmentations_0 = merge_annotations(annotations_0, segmentations_0, corners_0, tag_seg_inds_0)
         annotations_1, segmentations_1 = merge_annotations(annotations_1, segmentations_1, corners_1, tag_seg_inds_1)
 
-        boxes_0, is_tags_0, keypoint_vecs_0, scores_0, detection_indeces_0, gt_centers_0, assoc_dict_0 = get_boxes(annotations_0, segmentations_0, self.augment, 
+        _, is_tags_0, keypoint_vecs_0, scores_0, detection_indeces_0, gt_centers_0, assoc_dict_0 = get_boxes(annotations_0, segmentations_0, self.augment, 
                                                                                                          self.width, self.height, 
                                                                                                          self.resize, basename_0, self.score_thresh)
-        boxes_1, is_tags_1, keypoint_vecs_1, scores_1, detection_indeces_1, gt_centers_1, assoc_dict_1 = get_boxes(annotations_1, segmentations_1, self.augment, 
+        _, is_tags_1, keypoint_vecs_1, scores_1, detection_indeces_1, gt_centers_1, assoc_dict_1 = get_boxes(annotations_1, segmentations_1, self.augment, 
                                                                                                          self.width, self.height, 
                                                                                                          self.resize, basename_1, self.score_thresh)
-        box_features_0 = get_feature_vecs(boxes_0, image_0_path, self.feature_predictor, self.device, self.feature_dict) 
-        box_features_1 = get_feature_vecs(boxes_1, image_1_path, self.feature_predictor, self.device, self.feature_dict) 
+        #box_features_0 = get_feature_vecs(boxes_0, image_0_path, self.feature_predictor, self.device, self.feature_dict) 
+        #box_features_1 = get_feature_vecs(boxes_1, image_1_path, self.feature_predictor, self.device, self.feature_dict) 
 
         match_matrix, _ = get_assoc_matrix(assoc_dict_0, assoc_dict_1, os.path.basename(annotation_path))
         match_matrix = torch.from_numpy(match_matrix).float()
@@ -370,16 +370,16 @@ class AssociationDataset(Dataset):
 
         if self.augment:
             #random flip
-            box_features_0, box_features_1, keypoint_vecs_0, keypoint_vecs_1 = rand_flip(box_features_0, box_features_1, keypoint_vecs_0, keypoint_vecs_1)
+            _, _, keypoint_vecs_0, keypoint_vecs_1 = rand_flip(None, None, keypoint_vecs_0, keypoint_vecs_1)
 
-        box_features = (box_features_0.to(self.device), box_features_1.to(self.device))
+        #box_features = (box_features_0.to(self.device), box_features_1.to(self.device))
         keypoint_vecs = (keypoint_vecs_0.to(self.device), keypoint_vecs_1.to(self.device))
         is_tags = (is_tags_0.to(self.device), is_tags_1.to(self.device))
         scores = (scores_0.to(self.device), scores_1.to(self.device))
         gt_matrices = [match_matrix.to(self.device)]
         gt_vis = (detection_indeces_0, detection_indeces_1, gt_centers_0, gt_centers_1, image_0_path, image_1_path, os.path.basename(annotation_path))
 
-        return box_features, keypoint_vecs, is_tags, scores, gt_matrices, gt_vis
+        return None, keypoint_vecs, is_tags, scores, gt_matrices, gt_vis
 
     def get_paths(self, annotations_dir):
         paths = []

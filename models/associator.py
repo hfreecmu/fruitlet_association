@@ -317,7 +317,7 @@ class Associator(nn.Module):
             'norm': gnn_params['norm']
         }
         
-        self.denc = DescriptorEncoder()
+        #self.denc = DescriptorEncoder()
         self.kenc = KeypointEncoder()
 
         self.gnn = AttentionalGNN(gnn_params)
@@ -329,19 +329,21 @@ class Associator(nn.Module):
         self.register_parameter('bin_score', bin_score)
 
     def forward(self, box_features, keypoint_vecs, is_tags, scores):
-        descs_0, descs_1 = box_features
+        #descs_0, descs_1 = box_features
         kpts_0, kpts_1 = keypoint_vecs
         is_tags_0, is_tags_1 = is_tags
         scores_0, scores_1 = scores
 
-        descs_0 = self.denc(descs_0).squeeze(-1).squeeze(-1)
-        descs_1 = self.denc(descs_1).squeeze(-1).squeeze(-1)
+        #descs_0 = self.denc(descs_0).squeeze(-1).squeeze(-1)
+        #descs_1 = self.denc(descs_1).squeeze(-1).squeeze(-1)
 
         kpts_0 = self.kenc(kpts_0).squeeze(-1).squeeze(-1)
         kpts_1 = self.kenc(kpts_1).squeeze(-1).squeeze(-1)
 
-        descs_0 = descs_0 + kpts_0
-        descs_1 = descs_1 + kpts_1
+        #descs_0 = descs_0 + kpts_0
+        #descs_1 = descs_1 + kpts_1
+        descs_0 = kpts_0
+        descs_1 = kpts_1
 
         descs_0 = torch.concatenate([descs_0, is_tags_0.unsqueeze(-1), scores_0.unsqueeze(-1)], dim=1)
         descs_1 = torch.concatenate([descs_1, is_tags_1.unsqueeze(-1), scores_1.unsqueeze(-1)], dim=1)

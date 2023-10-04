@@ -1,10 +1,9 @@
 import torch.nn as nn
 import torch
 from models.encoder import DescriptorEncoder, KeypointEncoder
-#from models.transformer_encoder import TransformerEncoderLayer
+from models.transformer_encoder import TransformerEncoderLayer
 
 #TODO why remove bias for conv?
-#TODO relus or leaky relu
 
 ### OT
 def log_sinkhorn_iterations(Z: torch.Tensor, log_mu: torch.Tensor, log_nu: torch.Tensor, iters: int) -> torch.Tensor:
@@ -115,7 +114,7 @@ def log_optimal_transport(scores: torch.Tensor, alpha: torch.Tensor, iters: int)
 # ###
 
 ### mlp
-def fc(in_dim, out_dims, norm, init_constant):
+def fc(in_dim, out_dims, norm):
     layers = []
     prev_dim = in_dim
     for i in range(len(out_dims) - 1):
@@ -139,20 +138,17 @@ def fc(in_dim, out_dims, norm, init_constant):
     final_fc = nn.Linear(prev_dim, out_dims[-1])
     layers.append(final_fc)
 
-    if init_constant:
-        nn.init.constant_(layers[-1].bias, 0.0)
-
     return nn.Sequential(*layers)
 
 class MLP(nn.Module):
-    def __init__(self, params, init_constant=False):
+    def __init__(self, params):
         super(MLP, self).__init__()
 
         input_dim = params['input_dim']
         output_dims = params['output_dims']
         norm = params['norm']
 
-        self.network = fc(input_dim, output_dims, norm, init_constant)
+        self.network = fc(input_dim, output_dims, norm)
 
     def forward(self, x):
         x = self.network(x)
@@ -160,38 +156,38 @@ class MLP(nn.Module):
 ###
 
 ### gnn
-# class mySequential(nn.Sequential):
-#     def forward(self, *input):
-#         for module in self._modules.values():
-#             input = module(*input)
-#         return input
+class mySequential(nn.Sequential):
+    def forward(self, *input):
+        for module in self._modules.values():
+            input = module(*input)
+        return input
     
-# def gnn(layers, d_model, dim_feedforward, num_heads, batch_first=True):
-#     network = []
-#     for layer in layers:
-#         transformer = TransformerEncoderLayer(name=layer, d_model=d_model, 
-#                                               nhead=num_heads,
-#                                               dim_feedforward=dim_feedforward,
-#                                               batch_first=batch_first)
-#         network.append(transformer)
+def gnn(layers, d_model, dim_feedforward, num_heads, batch_first=True):
+    network = []
+    for layer in layers:
+        transformer = TransformerEncoderLayer(name=layer, d_model=d_model, 
+                                              nhead=num_heads,
+                                              dim_feedforward=dim_feedforward,
+                                              batch_first=batch_first)
+        network.append(transformer)
     
-#     return mySequential(*network)
+    return mySequential(*network)
 
-# class GNN(nn.Module):
-#     def __init__(self, params):
-#         super(GNN, self).__init__()
+class GNN(nn.Module):
+    def __init__(self, params):
+        super(GNN, self).__init__()
 
-#         layers = params['layers']
-#         d_model = params['d_model']
-#         dim_feedforward = params['dim_feedforward']
-#         num_heads = params['num_heads']
+        layers = params['layers']
+        d_model = params['d_model']
+        dim_feedforward = params['dim_feedforward']
+        num_heads = params['num_heads']
 
-#         self.network = gnn(layers, d_model, dim_feedforward, num_heads)
+        self.network = gnn(layers, d_model, dim_feedforward, num_heads)
 
-#     def forward(self, src0, src1):
-#         src0, src1 = self.network(src0, src1)
+    def forward(self, src0, src1):
+        src0, src1 = self.network(src0, src1)
 
-#         return src0, src1
+        return src0, src1
 
 def attention(query, key, value):
     dim = query.shape[3]
@@ -243,8 +239,8 @@ class AttentionalPropagation(nn.Module):
         self.attn = MultiHeadedAttention(num_heads, feature_dim)
         self.mlp = MLP({'input_dim': feature_dim*2, 
                         'output_dims': [feature_dim*2, feature_dim],
-                        'norm': norm}, init_constant=False)
-        #moved blow
+                        'norm': norm})
+        #removed
         #nn.init.constant_(self.mlp[-1].bias, 0.0)
 
     def forward(self, x, source):
@@ -321,6 +317,7 @@ class Associator(nn.Module):
         self.kenc = KeypointEncoder()
 
         self.gnn = AttentionalGNN(gnn_params)
+        #self.gnn = GNN(gnn_params)
         self.final_mlp = MLP(final_mlp_params)
         self.feature_scale = gnn_params['d_model']**0.5
         self.sinkhorn_iterations = params['sinkhorn_iterations']

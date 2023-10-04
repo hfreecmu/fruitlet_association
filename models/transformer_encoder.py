@@ -189,8 +189,8 @@ class TransformerEncoderLayer(Module):
             why_not_sparsity_fast_path = "num_head is odd"
         elif torch.is_autocast_enabled():
             why_not_sparsity_fast_path = "autocast is enabled"
-        if not why_not_sparsity_fast_path:
-            raise RuntimeError('Not supported')
+        if False and not why_not_sparsity_fast_path:
+            #raise RuntimeError('Not supported')
             tensor_args = (
                 src,
                 self.self_attn.in_proj_weight,

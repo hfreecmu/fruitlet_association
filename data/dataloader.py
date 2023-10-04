@@ -7,6 +7,8 @@ from utils.utils import read_dict, read_pickle, create_cfg, read_pickle, write_p
 import cv2
 from models.feature_predictor import FeaturePredictor
 from detectron2.structures import Boxes
+import torchvision.transforms.functional as F
+import copy
 
 #https://pupil-apriltags.readthedocs.io/en/stable/api.html
 #https://github.com/pupil-labs/apriltags
@@ -15,7 +17,7 @@ from pupil_apriltags import Detector as AprilTagDetector
 #TODO augment we are missing from original is rand_remove_assoc because we do not have that concept
 
 SEG_MODEL_PATH='/home/frc-ag-3/harry_ws/fruitlet_2023/labelling/segmentation/turk/mask_rcnn/mask_best.pth'
-DUMP_DIR='/home/frc-ag-3/harry_ws/fruitlet_2023/scripts/inhand/fruitlet_association/datasets/DUMMY'
+#DUMP_DIR='/home/frc-ag-3/harry_ws/fruitlet_2023/scripts/inhand/fruitlet_association/datasets/DUMMY'
 
 def detect_aprilttag(detector, im_path, tag_id):
     im = cv2.imread(im_path)
@@ -142,7 +144,8 @@ def get_boxes(annotations, segmentations, augment,
 
         if augment:
             #first see if we drop
-            if np.random.uniform() < drop_prob[0]:
+            #but don't drop tag
+            if not is_tag and np.random.uniform() < drop_prob[0]:
                 if np.random.uniform() < np.random.uniform(drop_prob[1], drop_prob[2]):
                     continue
 
@@ -154,25 +157,34 @@ def get_boxes(annotations, segmentations, augment,
                 if score > 0.99:
                     score = 0.99
 
-            #thid augment by shifting boxes
+            #third augment by shifting boxes
             shifts = np.random.randint(-max_shift, max_shift + 1, size=(4,))
             x0 = x0 + shifts[0]
             x1 = x1 + shifts[1]
             y0 = y0 + shifts[2]
             y1 = y1 + shifts[3]
 
-            x0 = np.max([x0, 0])
-            x1 = np.min([x1, width - 1])
-            y0 = np.max([y0, 0])
-            y1 = np.min([y1, height - 1])
+        #make sure xs and ys are in valid range
+        x0 = np.max([x0, 0])
+        x1 = np.min([x1, width - 1])
+        y0 = np.max([y0, 0])
+        y1 = np.min([y1, height - 1])
 
-            #if cut off border then just drop it
-            #with area check below
-            if x1 < x0:
-                x1 = x0
+        seg_inds = seg_inds[seg_inds[:, 0] >= 0]
+        seg_inds = seg_inds[seg_inds[:, 0] < height]
+        seg_inds = seg_inds[seg_inds[:, 1] >= 0]
+        seg_inds = seg_inds[seg_inds[:, 1] < width]
 
-            if y1 < y0:
-                y1 = y0
+        if seg_inds.shape[0] == 0:
+            continue
+
+        #if cut off border then just drop it
+        #with area check below
+        if x1 < x0:
+            x1 = x0
+
+        if y1 < y0:
+            y1 = y0
 
         #don't include if too small
         area = (x1-x0)*(y1-y0)
@@ -211,6 +223,13 @@ def get_boxes(annotations, segmentations, augment,
         else:
             assoc_dict["unmatched"].append(len(is_tags) - 1)
 
+        if is_tag:
+            if 'tag_ind' in assoc_dict:
+                raise RuntimeError('Dup tag')
+
+            assoc_dict['tag_ind'] = len(is_tags) - 1
+
+
     assoc_dict['num_dets'] = len(is_tags)
 
     out_boxes = torch.as_tensor(np.vstack(out_boxes), dtype=torch.float32)
@@ -222,19 +241,18 @@ def get_boxes(annotations, segmentations, augment,
 
     return out_boxes, is_tags, keypoint_vecs, scores, detection_indeces, gt_centers, assoc_dict
 
-def get_feature_vecs(boxes, im_path, feature_predictor, device, feature_dict):
-    
-    im = cv2.imread(im_path)
+def get_feature_vecs(boxes, im, feature_predictor, device, feature_dict):    
     boxes = Boxes(boxes).to(device)
     with torch.no_grad():
-        if not im_path in feature_dict:
-            box_features, features = feature_predictor(original_image=im, boxes=boxes)
-            dump_path = os.path.join(DUMP_DIR, str(hash(im_path)) + '.pkl')
-            write_pickle(dump_path, [f.to('cpu') for f in features])
-            feature_dict[im_path] = dump_path
-        else:
-            features = [f.to(device) for f in read_pickle(feature_dict[im_path])]
-            box_features = feature_predictor.get_box_features(features=features, boxes=boxes)
+        box_features, _ = feature_predictor(original_image=im, boxes=boxes)
+        # if not im_path in feature_dict:
+        #     box_features, features = feature_predictor(original_image=im, boxes=boxes)
+        #     dump_path = os.path.join(DUMP_DIR, str(hash(im_path)) + '.pkl')
+        #     write_pickle(dump_path, [f.to('cpu') for f in features])
+        #     feature_dict[im_path] = dump_path
+        # else:
+        #     features = [f.to(device) for f in read_pickle(feature_dict[im_path])]
+        #     box_features = feature_predictor.get_box_features(features=features, boxes=boxes)
 
     return box_features.to('cpu')
 
@@ -278,6 +296,23 @@ def get_assoc_matrix(assoc_dict_0, assoc_dict_1, basename):
     for col in assoc_dict_1['non_matches']:
         match_matrix[-1, col] = 1.0
         mask_matrix[:, col] = 1.0
+    
+    #now do tag
+    if 'tag_ind' in assoc_dict_0 and 'tag_ind' in assoc_dict_1:
+        row_tag_ind = assoc_dict_0['tag_ind']
+        col_tag_ind = assoc_dict_1['tag_ind']
+        match_matrix[row_tag_ind, col_tag_ind] = 1.0
+        mask_matrix[row, :] = 1.0
+        mask_matrix[:, col] = 1.0
+    elif 'tag_ind' in assoc_dict_0:
+        row_tag_ind = assoc_dict_0['tag_ind']
+        match_matrix[row_tag_ind, -1] = 1.0
+        mask_matrix[row, :] = 1.0
+    elif 'tag_ind' in assoc_dict_1:
+        col_tag_ind = assoc_dict_1['tag_ind']
+        match_matrix[-1, col_tag_ind] = 1.0
+        mask_matrix[:, col] = 1.0
+
 
     return match_matrix, mask_matrix
 
@@ -301,6 +336,14 @@ def rand_flip(descs_0, descs_1, kpts_0, kpts_1):
 
     return descs_0, descs_1, kpts_0, kpts_1
 
+#warp 2D points using homography
+def warp_points(points, H):
+    points_homo = np.ones((points.shape[0], 3))
+    points_homo[:, 0:2] = points
+    perspective_points_homo = (H @ points_homo.T).T
+    perspective_points = perspective_points_homo[:, 0:2] / perspective_points_homo[:, 2:]
+
+    return perspective_points
 
 class AssociationDataset(Dataset):
     def __init__(self, annotatons_dir, segmentations_dir, augment,
@@ -324,6 +367,11 @@ class AssociationDataset(Dataset):
 
         self.score_thresh = score_thresh
         self.feature_dict = dict()
+
+        self.random_affine = T.RandomAffine(degrees=(-30, 30), translate=(0.1, 0.1), scale=(0.75, 0.9))
+        self.random_brightness = T.ColorJitter(brightness=0.1,contrast=0.1,saturation=0.1,hue=0.05)
+        self.perspective_distortion_scale = 0.4
+        self.gauss_blur = T.GaussianBlur(kernel_size=(5, 5), sigma=(0.1, 0.5))
 
     def __len__(self):
         return len(self.annotation_paths)
@@ -355,14 +403,30 @@ class AssociationDataset(Dataset):
         annotations_0, segmentations_0 = merge_annotations(annotations_0, segmentations_0, corners_0, tag_seg_inds_0)
         annotations_1, segmentations_1 = merge_annotations(annotations_1, segmentations_1, corners_1, tag_seg_inds_1)
 
+        image_0 = cv2.imread(image_0_path)
+        image_1 = cv2.imread(image_1_path)
+
+        if self.augment:
+            if np.random.uniform() < 0.5:
+                if np.random.uniform() < 0.5:
+                    if np.random.uniform() < 0.5:
+                        image_0, annotations_0, segmentations_0 = self.augment_affine(image_0, annotations_0, segmentations_0)
+                    else:
+                        image_1, annotations_1, segmentations_1 = self.augment_affine(image_1, annotations_1, segmentations_1)
+                else:
+                    if np.random.uniform() < 0.5:
+                        image_0, annotations_0, segmentations_0 = self.augment_perspective(image_0, annotations_0, segmentations_0)
+                    else:
+                        image_1, annotations_1, segmentations_1 = self.augment_perspective(image_1, annotations_1, segmentations_1)
+
         boxes_0, is_tags_0, keypoint_vecs_0, scores_0, detection_indeces_0, gt_centers_0, assoc_dict_0 = get_boxes(annotations_0, segmentations_0, self.augment, 
                                                                                                          self.width, self.height, 
                                                                                                          self.resize, basename_0, self.score_thresh)
         boxes_1, is_tags_1, keypoint_vecs_1, scores_1, detection_indeces_1, gt_centers_1, assoc_dict_1 = get_boxes(annotations_1, segmentations_1, self.augment, 
                                                                                                          self.width, self.height, 
                                                                                                          self.resize, basename_1, self.score_thresh)
-        box_features_0 = get_feature_vecs(boxes_0, image_0_path, self.feature_predictor, self.device, self.feature_dict) 
-        box_features_1 = get_feature_vecs(boxes_1, image_1_path, self.feature_predictor, self.device, self.feature_dict) 
+        box_features_0 = get_feature_vecs(boxes_0, image_0, self.feature_predictor, self.device, self.feature_dict) 
+        box_features_1 = get_feature_vecs(boxes_1, image_1, self.feature_predictor, self.device, self.feature_dict) 
 
         match_matrix, _ = get_assoc_matrix(assoc_dict_0, assoc_dict_1, os.path.basename(annotation_path))
         match_matrix = torch.from_numpy(match_matrix).float()
@@ -377,6 +441,12 @@ class AssociationDataset(Dataset):
         is_tags = (is_tags_0.to(self.device), is_tags_1.to(self.device))
         scores = (scores_0.to(self.device), scores_1.to(self.device))
         gt_matrices = [match_matrix.to(self.device)]
+
+        #don't want loading if augmented / affined
+        if self.augment:
+            image_0_path = None
+            image_1_path = None
+
         gt_vis = (detection_indeces_0, detection_indeces_1, gt_centers_0, gt_centers_1, image_0_path, image_1_path, os.path.basename(annotation_path))
 
         return box_features, keypoint_vecs, is_tags, scores, gt_matrices, gt_vis
@@ -390,6 +460,117 @@ class AssociationDataset(Dataset):
             paths.append(os.path.join(annotations_dir, filename))
 
         return paths
+    
+    def augment_affine(self, image, annotations, segmentations):
+        torch_im = torch.from_numpy(image).permute(2, 0, 1)
+
+        angle, translations, scale, shear = T.RandomAffine.get_params(self.random_affine.degrees, 
+                                                                      self.random_affine.translate,
+                                                                      self.random_affine.scale,
+                                                                      self.random_affine.shear,
+                                                                      (torch_im.shape[-1], torch_im.shape[-2]))
+    
+        center = [torch_im.shape[-1] * 0.5, torch_im.shape[-2] * 0.5]
+        translations = list(translations)
+        shear = list(shear)
+        M = F._get_inverse_affine_matrix(center, angle, translations, scale, shear)
+        M = np.array([[M[0], M[1], M[2]],
+                      [M[3], M[4], M[5]],
+                      [0, 0, 1.0]])
+        
+        #have to invert not sure why torch does this
+        M = np.linalg.inv(M)
+
+        warped_segmentations = []
+        for seg_inds in segmentations:
+            seg_inds = np.stack((seg_inds[:, 1], seg_inds[:, 0]), axis=1)
+
+            affine_seg_inds = warp_points(seg_inds, M)
+            affine_seg_inds = np.round(affine_seg_inds).astype(int)
+
+            affine_seg_inds = np.stack((affine_seg_inds[:, 1], affine_seg_inds[:, 0]), axis=1)
+            warped_segmentations.append(affine_seg_inds)
+
+        warped_annotations = []
+        for annotation in annotations:
+            x0 = annotation["x0"]
+            x1 = annotation["x1"]
+            y0 = annotation["y0"]
+            y1 = annotation["y1"]
+
+            box_seg_inds = np.array([[x0, y0], [x0, y1], [x1, y0], [x1, y1]])
+            box_seg_inds = warp_points(box_seg_inds, M)
+
+            x0 = np.min(box_seg_inds[:, 0])
+            x1 = np.max(box_seg_inds[:, 0])
+            y0 = np.min(box_seg_inds[:, 1])
+            y1 = np.max(box_seg_inds[:, 1])    
+
+            warped_annotation = copy.deepcopy(annotation)
+            warped_annotation["x0"] = x0  
+            warped_annotation["x1"] = x1  
+            warped_annotation["y0"] = y0  
+            warped_annotation["y1"] = y1   
+            warped_annotations.append(warped_annotation)
+
+        torch_affine_img = F.affine(torch_im, angle, translations, scale, shear)
+        affine_img = torch_affine_img.permute(1, 2, 0).numpy()
+
+        return affine_img, warped_annotations, warped_segmentations
+    
+    def augment_perspective(self, image, annotations, segmentations):
+        torch_im = torch.from_numpy(image).permute(2, 0, 1)
+        
+        start_points, end_points = T.RandomPerspective.get_params(torch_im.shape[-1], 
+                                                                  torch_im.shape[-2], 
+                                                                  self.perspective_distortion_scale)
+
+        #not sure why torch does opposite direction when documentation
+        #says otherwise but it does
+        H = F._get_perspective_coeffs(end_points, start_points)
+
+        H = np.array([[H[0], H[1], H[2]],
+                      [H[3], H[4], H[5]],
+                      [H[6], H[7], 1.0]])
+        
+        warped_segmentations = []
+        for seg_inds in segmentations:
+            seg_inds = np.stack((seg_inds[:, 1], seg_inds[:, 0]), axis=1)
+
+            perspective_seg_inds = warp_points(seg_inds, H)
+            perspective_seg_inds = np.round(perspective_seg_inds).astype(int)
+
+            perspective_seg_inds = np.stack((perspective_seg_inds[:, 1], perspective_seg_inds[:, 0]), axis=1)
+            warped_segmentations.append(perspective_seg_inds)
+        
+        
+        warped_annotations = []
+        for annotation in annotations:
+            x0 = annotation["x0"]
+            x1 = annotation["x1"]
+            y0 = annotation["y0"]
+            y1 = annotation["y1"]
+
+            box_seg_inds = np.array([[x0, y0], [x0, y1], [x1, y0], [x1, y1]])
+            box_seg_inds = warp_points(box_seg_inds, H)
+
+            x0 = np.min(box_seg_inds[:, 0])
+            x1 = np.max(box_seg_inds[:, 0])
+            y0 = np.min(box_seg_inds[:, 1])
+            y1 = np.max(box_seg_inds[:, 1])    
+
+            warped_annotation = copy.deepcopy(annotation)
+            warped_annotation["x0"] = x0  
+            warped_annotation["x1"] = x1  
+            warped_annotation["y0"] = y0  
+            warped_annotation["y1"] = y1   
+            warped_annotations.append(warped_annotation)
+
+        torch_perspective_img = F.perspective(torch_im, start_points, 
+                                              end_points)
+        perspective_img = torch_perspective_img.permute(1, 2, 0).numpy()
+        
+        return perspective_img, warped_annotations, warped_segmentations
 
 def collate_fn(data):
     zipped = zip(data)

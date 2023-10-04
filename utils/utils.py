@@ -16,6 +16,11 @@ def read_dict(path):
         data = json.load(f)
     return data
 
+#write json
+def write_dict(path, data):
+    with open(path, 'w') as f:
+        json.dump(data, f)
+
 #read pkl file
 def read_pickle(path):
     with open(path, "rb") as f:
@@ -167,65 +172,73 @@ def extract_matches(scores, match_threshold):
     }
 
 #evaluate matches
-def evaluate_matches(matches, match_matrix):
+def evaluate_matches(matches, match_matrix, mask_matrix):
     indices0 = matches['matches0'].detach().cpu().numpy()
     indices1 = matches['matches1'].detach().cpu().numpy()
 
     match_matrix = match_matrix.detach().cpu().numpy()
-
-    num_tp = 0
-    num_fp = 0
-    #num_tn = 0
-    num_fn = 0
+    mask_matrix = mask_matrix.detach().cpu().numpy()
 
     pos_match_inds = np.argwhere(match_matrix[0:-1, 0:-1] > 0)
-    neg_row_inds = np.argwhere(match_matrix[0:-1, -1] > 0)
-    neg_col_inds = np.argwhere(match_matrix[-1, 0:-1] > 0)
+    #neg_row_inds = np.argwhere(match_matrix[0:-1, -1] > 0)
+    #neg_col_inds = np.argwhere(match_matrix[-1, 0:-1] > 0)
 
+    #start with precision
+    #which is tp matches / tp + fp matches
+    pres_tp = 0
+    pres_fp = 0
+    for row in range(indices0.shape[0]):
+        col = indices0[row]
+        
+        if col == -1:
+            continue
+
+        if mask_matrix[row, col] == 0:
+            continue
+        
+        if indices1[col] != row:
+            raise RuntimeError('Why here, should not happen')
+
+        if match_matrix[row, col] > 0:
+            pres_tp += 1
+        else:
+            pres_fp += 1
+
+    if pres_tp == 0:
+        precision = 0
+    else:
+        precision = pres_tp / (pres_tp + pres_fp) 
+
+
+    #now do recall
+    #which is tp matches over matches which should be tp but are not
+    rec_tp = 0
+    rec_fn = 0
     for row, col in pos_match_inds:
+        if mask_matrix[row, col] == 0:
+            continue
+
         if indices0[row] == col:
             if indices1[col] != row:
                 raise RuntimeError('Why here, should not happen')
             
-            num_tp += 2
+            rec_tp += 1
         else:
-            num_fn += 2
-            # if indices0[row] == -1:
-            #     num_fn += 1
-            # else:
-            #     num_fp += 1
-            
-            # if indices1[col] == -1:
-            #     num_fn += 1
-            # else:
-            #     num_fp += 1
+            rec_fn += 1
 
-    for row in neg_row_inds:
-        if indices0[row] == -1:
-            pass
-            #num_tn += 1
-        else:
-            num_fp += 1
-
-    for col in neg_col_inds:
-        if indices1[col] == -1:
-            pass
-            #num_tn += 1
-        else:
-            num_fp += 1
-
-    if num_tp == 0:
-        precision = 0
+    if rec_tp == 0:
         recall = 0
+    else:
+        recall = rec_tp / (rec_tp + rec_fn)
+
+    if precision == 0 or recall == 0:
         f1_score = 0
     else:
-        precision = num_tp / (num_tp + num_fp)
-        recall = num_tp / (num_tp + num_fn)
         f1_score = 2*precision*recall / (precision + recall)
-
+    
     return precision, recall, f1_score
 
-def vis_matches(matches, match_matrix, image_0_path, image_1_path, 
+def vis_matches(matches, match_matrix, mask_matrix, image_0_path, image_1_path, 
                 gt_centers_0, gt_centers_1, vis_thickness, output_path):
     
     im_0 = cv2.imread(image_0_path)
@@ -239,12 +252,16 @@ def vis_matches(matches, match_matrix, image_0_path, image_1_path,
     #indices1 = matches['matches1'].detach().cpu().numpy()
 
     match_matrix = match_matrix.detach().cpu().numpy()
+    mask_matrix = mask_matrix.detach().cpu().numpy()
 
     for row in range(indices0.shape[0]):
         if indices0[row] == -1:
             continue
 
         col = indices0[row]
+
+        if mask_matrix[row, col] == 0:
+            continue
 
         if match_matrix[row, col] == 1.0:
             color = [0, 255, 0]
@@ -258,6 +275,27 @@ def vis_matches(matches, match_matrix, image_0_path, image_1_path,
         cv2.line(comb_im, (int(x0), int(y0)), (int(x1), int(y1)), color, vis_thickness)
 
     cv2.imwrite(output_path, comb_im)
+
+def plot_metrics(output_dir, precisions, recalls, f1_scores, match_thresholds):
+    comb_path = os.path.join(output_dir, 'metrics.png')
+    comp_np_path = comb_path.replace('.png', '.npy')
+
+    plt.plot(match_thresholds, precisions, 'b', label="precision")
+    plt.plot(match_thresholds, recalls, 'r', label="recall")
+    plt.plot(match_thresholds, f1_scores, 'g', label="f1 score")
+    plt.legend(loc="lower left")
+    plt.xlabel("Matching Thresholds")
+    plt.xticks(np.arange(min(match_thresholds), max(match_thresholds), 0.1))
+    plt.savefig(comb_path)
+
+    plt.clf()
+
+    comb_np = np.zeros((len(match_thresholds), 4))
+    comb_np[:, 0] = match_thresholds
+    comb_np[:, 1] = precisions
+    comb_np[:, 2] = recalls
+    comb_np[:, 3] = f1_scores
+    np.save(comp_np_path, comb_np)
 
 #create feature pred cfg
 def create_cfg(model_file, score_thresh):

@@ -310,7 +310,7 @@ class Associator(nn.Module):
         final_mlp_params = {
             'input_dim': gnn_params['d_model'],
             'output_dims': [gnn_params['d_model']],
-            'norm': gnn_params['norm']
+            'norm': None
         }
         
         self.denc = DescriptorEncoder()
@@ -340,8 +340,10 @@ class Associator(nn.Module):
         descs_0 = descs_0 + kpts_0
         descs_1 = descs_1 + kpts_1
 
-        descs_0 = torch.concatenate([descs_0, is_tags_0.unsqueeze(-1), scores_0.unsqueeze(-1)], dim=1)
-        descs_1 = torch.concatenate([descs_1, is_tags_1.unsqueeze(-1), scores_1.unsqueeze(-1)], dim=1)
+        #descs_0 = torch.concatenate([descs_0, is_tags_0.unsqueeze(-1), scores_0.unsqueeze(-1)], dim=1)
+        descs_0 = torch.concatenate([descs_0, is_tags_0.unsqueeze(-1)], dim=1)
+        #descs_1 = torch.concatenate([descs_1, is_tags_1.unsqueeze(-1), scores_1.unsqueeze(-1)], dim=1)
+        descs_1 = torch.concatenate([descs_1, is_tags_1.unsqueeze(-1)], dim=1)
 
         descs_0, descs_1 = self.gnn(descs_0.unsqueeze(0), descs_1.unsqueeze(0))
 

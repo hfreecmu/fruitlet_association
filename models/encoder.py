@@ -4,7 +4,7 @@ import torch.nn as nn
 def conv(in_channels, out_channels, relu, norm, dropout, kernel_size, stride, padding=1):
     layers = []
 
-    conv_layer = nn.Conv2d(in_channels=in_channels, out_channels=out_channels, kernel_size=kernel_size, stride=stride, padding=padding, bias=False)
+    conv_layer = nn.Conv2d(in_channels=in_channels, out_channels=out_channels, kernel_size=kernel_size, stride=stride, padding=padding, bias=True)
     layers.append(conv_layer)
 
     if norm == "instance":
@@ -50,7 +50,7 @@ class DescriptorEncoder(nn.Module):
             resnets.append(ResnetBlock(512, 512, relu=True, norm=norm, dropout=dropout))
         self.resnets = nn.Sequential(*resnets)
 
-        self.conv_out = conv(512, 510, relu=False, norm=None, dropout=False, kernel_size=4, stride=2)
+        self.conv_out = conv(512, 511, relu=False, norm=None, dropout=False, kernel_size=4, stride=2)
 
     def forward(self, x):
 
@@ -68,7 +68,8 @@ class KeypointEncoder(nn.Module):
         self.conv1 = conv(32, 64, relu=True, norm=norm, dropout=True, kernel_size=4, stride=2)
         self.conv2 = conv(64, 128, relu=True, norm=norm, dropout=True, kernel_size=4, stride=2)
         self.conv3 = conv(128, 256, relu=True, norm=norm, dropout = False, kernel_size=4, stride=2)
-        self.conv4 = conv(256, 510, relu=False, norm=None, dropout = False, kernel_size=4, stride=2, padding=0)
+        self.conv4 = conv(256, 256, relu=True, norm=norm, dropout = False, kernel_size=4, stride=2)
+        self.conv5 = conv(256, 511, relu=False, norm=None, dropout = False, kernel_size=4, stride=2, padding=0)
 
     def forward(self, x):
         x = self.conv0(x)
@@ -76,6 +77,7 @@ class KeypointEncoder(nn.Module):
         x = self.conv2(x)
         x = self.conv3(x)
         x = self.conv4(x)
+        x = self.conv5(x)
 
         return x
 

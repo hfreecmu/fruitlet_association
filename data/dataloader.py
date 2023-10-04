@@ -347,7 +347,7 @@ def warp_points(points, H):
 
 class AssociationDataset(Dataset):
     def __init__(self, annotatons_dir, segmentations_dir, augment,
-                 width=1440, height=1080, resize_size=64, score_thresh=0.4,
+                 width=1440, height=1080, resize_size=128, score_thresh=0.4,
                  model_path=SEG_MODEL_PATH, device='cuda'):
         self.annotation_paths = self.get_paths(annotatons_dir)
         self.segmentations_dir = segmentations_dir
@@ -371,7 +371,6 @@ class AssociationDataset(Dataset):
         self.random_affine = T.RandomAffine(degrees=(-30, 30), translate=(0.1, 0.1), scale=(0.75, 0.9))
         self.random_brightness = T.ColorJitter(brightness=0.1,contrast=0.1,saturation=0.1,hue=0.05)
         self.perspective_distortion_scale = 0.4
-        self.gauss_blur = T.GaussianBlur(kernel_size=(5, 5), sigma=(0.1, 0.5))
 
     def __len__(self):
         return len(self.annotation_paths)
@@ -407,6 +406,12 @@ class AssociationDataset(Dataset):
         image_1 = cv2.imread(image_1_path)
 
         if self.augment:
+            if np.random.uniform() < 0.2:
+                if np.random.uniform() < 0.5:
+                    image_0 = self.aug_brightness(image_0)
+                else:
+                    image_1 = self.aug_brightness(image_1)
+
             if np.random.uniform() < 0.5:
                 if np.random.uniform() < 0.5:
                     if np.random.uniform() < 0.5:
@@ -428,9 +433,9 @@ class AssociationDataset(Dataset):
         box_features_0 = get_feature_vecs(boxes_0, image_0, self.feature_predictor, self.device, self.feature_dict) 
         box_features_1 = get_feature_vecs(boxes_1, image_1, self.feature_predictor, self.device, self.feature_dict) 
 
-        match_matrix, _ = get_assoc_matrix(assoc_dict_0, assoc_dict_1, os.path.basename(annotation_path))
+        match_matrix, mask_matrix = get_assoc_matrix(assoc_dict_0, assoc_dict_1, os.path.basename(annotation_path))
         match_matrix = torch.from_numpy(match_matrix).float()
-        #mask_matrix = torch.from_numpy(mask_matrix).float()
+        mask_matrix = torch.from_numpy(mask_matrix).float()
 
         if self.augment:
             #random flip
@@ -440,7 +445,7 @@ class AssociationDataset(Dataset):
         keypoint_vecs = (keypoint_vecs_0.to(self.device), keypoint_vecs_1.to(self.device))
         is_tags = (is_tags_0.to(self.device), is_tags_1.to(self.device))
         scores = (scores_0.to(self.device), scores_1.to(self.device))
-        gt_matrices = [match_matrix.to(self.device)]
+        gt_matrices = [match_matrix.to(self.device), mask_matrix.to(self.device)]
 
         #don't want loading if augmented / affined
         if self.augment:
@@ -571,6 +576,13 @@ class AssociationDataset(Dataset):
         perspective_img = torch_perspective_img.permute(1, 2, 0).numpy()
         
         return perspective_img, warped_annotations, warped_segmentations
+    
+    def aug_brightness(self, image):
+        torch_im = torch.from_numpy(image).permute(2, 0, 1)
+        torch_im = self.random_brightness(torch_im)
+        image = torch_im.permute(1, 2, 0).numpy()
+
+        return image
 
 def collate_fn(data):
     zipped = zip(data)

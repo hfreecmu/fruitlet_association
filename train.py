@@ -94,14 +94,14 @@ def train(opt):
                         raise RuntimeError('Only batch size 1 supported validate')
                     
                     box_features, keypoint_vecs, is_tags, scores, gt_matrices, _ = data[0][0]
-                    match_matrix = gt_matrices[0]
+                    match_matrix, mask_matrix = gt_matrices
 
                     match_scores = model(box_features, keypoint_vecs, is_tags, scores)
 
                     val_loss = get_loss(match_scores, match_matrix)
 
                     matches = extract_matches(match_scores, opt.match_thresh)
-                    precision, recall, f1_score = evaluate_matches(matches, match_matrix)
+                    precision, recall, f1_score = evaluate_matches(matches, match_matrix, mask_matrix)
 
                     precisions.append(precision)
                     recalls.append(recall)
@@ -137,11 +137,11 @@ def parse_args():
 
     parser.add_argument('--checkpoint_dir', default='./checkpoints')
 
-    parser.add_argument('--num_epochs', type=int, default=100)
-    parser.add_argument('--milestones', type=list, default=[40, 80])
+    parser.add_argument('--num_epochs', type=int, default=200)
+    parser.add_argument('--milestones', type=list, default=[20, 40, 100])
     parser.add_argument('--batch_size', type=int, default=8)
-    parser.add_argument('--lr', type=float, default=5e-5)
-    parser.add_argument('--weight_decay', type=float, default=1e-6)
+    parser.add_argument('--lr', type=float, default=1e-4)
+    parser.add_argument('--weight_decay', type=float, default=1e-4)
     parser.add_argument('--gamma', type=float, default=0.1)
 
     parser.add_argument('--log_steps', type=int, default=10)

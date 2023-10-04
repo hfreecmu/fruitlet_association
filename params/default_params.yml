@@ -16,5 +16,5 @@
   'num_heads': 8
   'norm': "instance"
 
-'sinkhorn_iterations': 100
+'sinkhorn_iterations': 25
 

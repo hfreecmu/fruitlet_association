@@ -15,7 +15,7 @@ def conv(in_channels, out_channels, relu, norm, dropout, kernel_size, stride, pa
         raise RuntimeError('Illagel norm passed: ' + norm)
     
     if relu:
-        layers.append(nn.LeakyReLU(0.2))
+        layers.append(nn.ReLU())
 
     if dropout:
         layers.append(nn.Dropout(0.5))

@@ -21,17 +21,25 @@ for image_path_0, image_path_1 in images_list:
         if new_basename in image_dict:
             continue
 
-        right_path = image_path.replace('LEFT', 'RIGHT')
-
         image_dict.add(new_basename)
+        
+        right_path = image_path.replace('LEFT', 'RIGHT')
+        right_basename = new_basename.replace('LEFT', 'RIGHT')
 
-        for path in [image_path, right_path]:
-            output_path = os.path.join(output_dir, os.path.basename(path))
+        left_output_path = os.path.join(output_dir, new_basename)
+        right_output_path = os.path.join(output_dir, right_basename)
+
+        input_paths = [image_path, right_path]
+        output_paths = [left_output_path, right_output_path]
+
+        for i in range(2):
+            src = input_paths[i]
+            dest = output_paths[i]
 
             if use_softlink:
-                command = 'ln -s ' + path + ' ' + output_path
+                command = 'ln -s ' + src + ' ' + dest
             else:
-                command = 'cp ' + path + ' ' + output_path
+                command = 'cp ' + src + ' ' + dest
 
             os.system(command)
 

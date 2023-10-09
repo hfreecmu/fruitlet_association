@@ -64,6 +64,7 @@ for tag_dir in tag_dirs:
         image_list.append(image_path)
 
 #now go through images and detect april tags
+#TODO can migrate to inhand_utils detect april tags when ready
 detector = AprilTagDetector()
 filtered_image_list = []
 num_unfiltered = len(image_list)

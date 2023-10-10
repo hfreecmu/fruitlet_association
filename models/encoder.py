@@ -64,12 +64,11 @@ class KeypointEncoder(nn.Module):
     def __init__(self, norm='instance'):
         super(KeypointEncoder, self).__init__()
 
-        self.conv0 = conv(3, 32, relu=True, norm=norm, dropout=False, kernel_size=4, stride=2)
+        self.conv0 = conv(3, 32, relu=True, norm=norm, dropout=False, kernel_size=3, stride=1, padding=1)
         self.conv1 = conv(32, 64, relu=True, norm=norm, dropout=True, kernel_size=4, stride=2)
         self.conv2 = conv(64, 128, relu=True, norm=norm, dropout=True, kernel_size=4, stride=2)
         self.conv3 = conv(128, 256, relu=True, norm=norm, dropout = False, kernel_size=4, stride=2)
-        self.conv4 = conv(256, 256, relu=True, norm=norm, dropout = False, kernel_size=4, stride=2)
-        self.conv5 = conv(256, 511, relu=False, norm=None, dropout = False, kernel_size=4, stride=2, padding=0)
+        self.conv4 = conv(256, 511, relu=False, norm=None, dropout = False, kernel_size=4, stride=2, padding=1)
 
     def forward(self, x):
         x = self.conv0(x)
@@ -77,7 +76,6 @@ class KeypointEncoder(nn.Module):
         x = self.conv2(x)
         x = self.conv3(x)
         x = self.conv4(x)
-        x = self.conv5(x)
 
         return x
 

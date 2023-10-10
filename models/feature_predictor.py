@@ -14,6 +14,10 @@ class FeaturePredictor(nn.Module):
         self.backbone = model.backbone
         self.box_in_features = model.roi_heads.box_in_features
         self.box_pooler = model.roi_heads.box_pooler
+
+        self.mask_in_features = model.roi_heads.mask_in_features
+        self.mask_pooler = model.roi_heads.mask_pooler
+        self.mask_head = model.roi_heads.mask_head
             
 
     def forward(self, original_image, boxes):
@@ -26,8 +30,8 @@ class FeaturePredictor(nn.Module):
         features = [feature_dict[f] for f in self.box_in_features]
         box_features = self.box_pooler(features, [boxes])
 
-        return box_features, features
-    
-    def get_box_features(self, features, boxes):
-        box_features = self.box_pooler(features, [boxes])
-        return box_features
+        mask_features = [feature_dict[f] for f in self.mask_in_features]
+        mask_features = self.mask_pooler(mask_features, [boxes])
+        pred_masks = self.mask_head(mask_features, [boxes], return_x=True)
+
+        return box_features, pred_masks

@@ -123,7 +123,7 @@ def get_boxes(annotations, segmentations, augment,
 
     for i in inds:
         annotation = annotations[i]
-        seg_inds = segmentations[i]
+        #seg_inds = segmentations[i]
 
         x0 = annotation["x0"]
         y0 = annotation["y0"]
@@ -168,13 +168,13 @@ def get_boxes(annotations, segmentations, augment,
         y0 = np.max([y0, 0])
         y1 = np.min([y1, height - 1])
 
-        seg_inds = seg_inds[seg_inds[:, 0] >= 0]
-        seg_inds = seg_inds[seg_inds[:, 0] < height]
-        seg_inds = seg_inds[seg_inds[:, 1] >= 0]
-        seg_inds = seg_inds[seg_inds[:, 1] < width]
+        # seg_inds = seg_inds[seg_inds[:, 0] >= 0]
+        # seg_inds = seg_inds[seg_inds[:, 0] < height]
+        # seg_inds = seg_inds[seg_inds[:, 1] >= 0]
+        # seg_inds = seg_inds[seg_inds[:, 1] < width]
 
-        if seg_inds.shape[0] == 0:
-            continue
+        # if seg_inds.shape[0] == 0:
+        #     continue
 
         #if cut off border then just drop it
         #with area check below
@@ -190,17 +190,18 @@ def get_boxes(annotations, segmentations, augment,
             continue
         
         #create a segmented image for just the box
-        box_seg_im = np.zeros((height, width))
-        box_seg_im[seg_inds[:, 0], seg_inds[:, 1]] = 1.0
+        # box_seg_im = np.zeros((height, width))
+        # box_seg_im[seg_inds[:, 0], seg_inds[:, 1]] = 1.0
 
         #create keypoint vector of
         #rows, columns, segmentations
         #TODO are y1 and x1 inclusive or exclusive throghout this?
         box_rows = rows[int(y0):int(y1), int(x0):int(x1)]
         box_cols = cols[int(y0):int(y1), int(x0):int(x1)]
-        box_seg = box_seg_im[int(y0):int(y1), int(x0):int(x1)]
+        # box_seg = box_seg_im[int(y0):int(y1), int(x0):int(x1)]
 
-        keypoint_vec = np.stack([box_rows, box_cols, box_seg])
+        # keypoint_vec = np.stack([box_rows, box_cols, box_seg])
+        keypoint_vec = np.stack([box_rows, box_cols])
         keypoint_vec = torch.from_numpy(keypoint_vec).float()
         keypoint_vec = resize(keypoint_vec)
 
@@ -242,7 +243,7 @@ def get_boxes(annotations, segmentations, augment,
 def get_feature_vecs(boxes, im, feature_predictor, device, feature_dict):    
     boxes = Boxes(boxes).to(device)
     with torch.no_grad():
-        box_features, _ = feature_predictor(original_image=im, boxes=boxes)
+        box_features, pred_masks = feature_predictor(original_image=im, boxes=boxes)
         # if not im_path in feature_dict:
         #     box_features, features = feature_predictor(original_image=im, boxes=boxes)
         #     dump_path = os.path.join(DUMP_DIR, str(hash(im_path)) + '.pkl')
@@ -252,7 +253,7 @@ def get_feature_vecs(boxes, im, feature_predictor, device, feature_dict):
         #     features = [f.to(device) for f in read_pickle(feature_dict[im_path])]
         #     box_features = feature_predictor.get_box_features(features=features, boxes=boxes)
 
-    return box_features.to('cpu')
+    return box_features.to('cpu'), pred_masks.to('cpu')
 
 def get_assoc_matrix(assoc_dict_0, assoc_dict_1, basename, augment):
     num_dets_0 = assoc_dict_0['num_dets']
@@ -359,7 +360,7 @@ class AssociationDataset(Dataset):
     def __init__(self, annotatons_dir, segmentations_dir, 
                  images_dir, model_path,
                  augment, device,
-                 width=1440, height=1080, resize_size=128, score_thresh=0.4):
+                 width=1440, height=1080, resize_size=28, score_thresh=0.4):
         
         self.annotation_paths = self.get_paths(annotatons_dir)
         self.segmentations_dir = segmentations_dir
@@ -448,14 +449,17 @@ class AssociationDataset(Dataset):
                     else:
                         image_1, annotations_1, segmentations_1 = self.augment_perspective(image_1, annotations_1, segmentations_1)
 
-        boxes_0, is_tags_0, keypoint_vecs_0, scores_0, detection_indeces_0, gt_centers_0, assoc_dict_0 = get_boxes(annotations_0, segmentations_0, self.augment, 
+        boxes_0, is_tags_0, keypoint_vecs_0, scores_0, detection_indeces_0, gt_centers_0, assoc_dict_0 = get_boxes(annotations_0, None, self.augment, 
                                                                                                          self.width, self.height, 
                                                                                                          self.resize, '_'.join([basename_0, basename_1]), self.score_thresh)
-        boxes_1, is_tags_1, keypoint_vecs_1, scores_1, detection_indeces_1, gt_centers_1, assoc_dict_1 = get_boxes(annotations_1, segmentations_1, self.augment, 
+        boxes_1, is_tags_1, keypoint_vecs_1, scores_1, detection_indeces_1, gt_centers_1, assoc_dict_1 = get_boxes(annotations_1, None, self.augment, 
                                                                                                          self.width, self.height, 
                                                                                                          self.resize, '_'.join([basename_0, basename_1]), self.score_thresh)
-        box_features_0 = get_feature_vecs(boxes_0, image_0, self.feature_predictor, self.device, self.feature_dict) 
-        box_features_1 = get_feature_vecs(boxes_1, image_1, self.feature_predictor, self.device, self.feature_dict) 
+        box_features_0, pred_masks_0 = get_feature_vecs(boxes_0, image_0, self.feature_predictor, self.device, self.feature_dict) 
+        box_features_1, pred_masks_1 = get_feature_vecs(boxes_1, image_1, self.feature_predictor, self.device, self.feature_dict) 
+
+        keypoint_vecs_0 = torch.concatenate([keypoint_vecs_0, pred_masks_0], dim=1)
+        keypoint_vecs_1 = torch.concatenate([keypoint_vecs_1, pred_masks_1], dim=1)
 
         match_matrix = get_assoc_matrix(assoc_dict_0, assoc_dict_1, '_'.join([basename_0, basename_1]), self.augment)
 

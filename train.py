@@ -21,7 +21,7 @@ def train(opt):
     #get dataloaders
     train_dataloader = get_data_loader(opt.annotations_dir, opt.seg_dir,
                                        opt.images_dir, opt.seg_model_path,
-                                       False, opt.batch_size, opt.shuffle,
+                                       True, opt.batch_size, opt.shuffle,
                                        opt.device)
     val_dataloader = get_data_loader(opt.val_dir, opt.seg_dir,
                                      opt.images_dir, opt.seg_model_path,

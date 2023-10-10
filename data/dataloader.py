@@ -140,7 +140,7 @@ def get_boxes(annotations, segmentations, augment,
         if score < score_thresh:
             continue
 
-        if augment:
+        if False and augment:
             #first see if we drop
             #but don't drop tag
             if not is_tag and np.random.uniform() < drop_prob[0]:
@@ -264,6 +264,7 @@ def get_assoc_matrix(assoc_dict_0, assoc_dict_1, basename, augment):
     matches_1 = assoc_dict_1['matches']
 
     #taking this out for augment
+    augment=False
     if (not augment) and (not len(matches_0) == len(matches_1)):
         raise RuntimeError('Invalid match size, debug needed ' + basename)
     
@@ -310,18 +311,40 @@ def get_assoc_matrix(assoc_dict_0, assoc_dict_1, basename, augment):
     #     match_matrix[-1, col_tag_ind] = 1.0
     return match_matrix
 
-def rand_flip(descs_0, descs_1, kpts_0, kpts_1):
+def flip_image(image):
+    image = np.flip(image, axis=1)
+    return image
+
+def flip_annotations(annotations, width):
+    for annotation in annotations:
+        x0 = annotation["x0"]
+        x1 = annotation["x1"]
+
+        x1_new = width - 1 - x0
+        x0_new = width - 1 - x1
+
+        annotation["x0"] = x0_new
+        annotation["x1"] = x1_new
+
+def flip_segmentations(segmentations, width):
+    for seg_inds in segmentations:
+        seg_inds[:, 1] = width - 1 - seg_inds[:, 1]
+
+def flip_data(image, annotations, segmentations, width):
+    image = flip_image(image)
+    flip_annotations(annotations, width)
+    flip_segmentations(segmentations, width)
+
+    return image, annotations, segmentations
+
+def rand_flip(image_0, image_1, annotations_0, annotations_1, 
+              segmentations_0, segmentations_1, width):
     rand_var = np.random.uniform()
     if rand_var < 0.5:
-        #box descriptors we fliplr
-        descs_0 = torch.fliplr(descs_0)
-        descs_1 = torch.fliplr(descs_1)
+        image_0, annotations_0, segmentations_0 = flip_data(image_0, annotations_0, segmentations_0, width)
+        image_1, annotations_1, segmentations_1 = flip_data(image_1, annotations_1, segmentations_1, width)
 
-        #keypoints we can also flip
-        kpts_0 = torch.fliplr(kpts_0)
-        kpts_1 = torch.fliplr(kpts_1)
-
-    return descs_0, descs_1, kpts_0, kpts_1
+    return image_0, image_1, annotations_0, annotations_1, segmentations_0, segmentations_1
 
 #warp 2D points using homography
 def warp_points(points, H):
@@ -402,6 +425,10 @@ class AssociationDataset(Dataset):
         image_0 = cv2.imread(image_0_path)
         image_1 = cv2.imread(image_1_path)
 
+        if self.augment:
+            #random flip
+            image_0, image_1, annotations_0, annotations_1, segmentations_0, segmentations_1 = rand_flip(image_0, image_1, annotations_0, annotations_1, segmentations_0, segmentations_1, self.width)
+
         if False and self.augment:
             if np.random.uniform() < 0.2:
                 if np.random.uniform() < 0.5:
@@ -433,10 +460,6 @@ class AssociationDataset(Dataset):
         match_matrix = get_assoc_matrix(assoc_dict_0, assoc_dict_1, '_'.join([basename_0, basename_1]), self.augment)
 
         match_matrix = torch.from_numpy(match_matrix).float()
-
-        if self.augment:
-            #random flip
-            box_features_0, box_features_1, keypoint_vecs_0, keypoint_vecs_1 = rand_flip(box_features_0, box_features_1, keypoint_vecs_0, keypoint_vecs_1)
 
         box_features = (box_features_0.to(self.device), box_features_1.to(self.device))
         keypoint_vecs = (keypoint_vecs_0.to(self.device), keypoint_vecs_1.to(self.device))

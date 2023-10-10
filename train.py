@@ -21,7 +21,7 @@ def train(opt):
     #get dataloaders
     train_dataloader = get_data_loader(opt.annotations_dir, opt.seg_dir,
                                        opt.images_dir, opt.seg_model_path,
-                                       True, opt.batch_size, opt.shuffle,
+                                       False, opt.batch_size, opt.shuffle,
                                        opt.device)
     val_dataloader = get_data_loader(opt.val_dir, opt.seg_dir,
                                      opt.images_dir, opt.seg_model_path,
@@ -151,7 +151,7 @@ def parse_args():
     parser.add_argument('--checkpoint_dir', default='./checkpoints')
 
     parser.add_argument('--num_epochs', type=int, default=200)
-    parser.add_argument('--milestones', type=list, default=[20, 40, 100])
+    parser.add_argument('--milestones', type=list, default=[20, 50, 100])
     parser.add_argument('--batch_size', type=int, default=8)
     parser.add_argument('--lr', type=float, default=1e-4)
     parser.add_argument('--weight_decay', type=float, default=1e-4)

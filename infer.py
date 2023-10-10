@@ -70,7 +70,7 @@ def infer(opt):
     plot_metrics(opt.vis_dir, precisions, recalls, f1_scores, mts)
 
 SEG_MODEL_PATH = '/home/frc-ag-3/harry_ws/fruitlet_2023/labelling/segmentation/turk/mask_rcnn/mask_best.pth'
-TRAIN_DIR = './datasets/train'
+TRAIN_DIR = './datasets/test'
 VAL_DIR = './datasets/val'
 SEG_DIR = './preprocess_data/pair_segmentations'
 IMAGES_DIR = './preprocess_data/pair_images'

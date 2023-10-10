@@ -20,9 +20,12 @@ torch.backends.cudnn.enabled = False
 def train(opt):
     #get dataloaders
     train_dataloader = get_data_loader(opt.annotations_dir, opt.seg_dir,
-                                       True, opt.batch_size, opt.shuffle)
+                                       opt.images_dir, opt.seg_model_path,
+                                       True, opt.batch_size, opt.shuffle,
+                                       opt.device)
     val_dataloader = get_data_loader(opt.val_dir, opt.seg_dir,
-                                       False, 1, False)
+                                     opt.images_dir, opt.seg_model_path,
+                                     False, 1, False, opt.device)
     #
 
     #load model
@@ -54,6 +57,7 @@ def train(opt):
             optimizer.zero_grad()
             for data_num in range(len(data)):
                 box_features, keypoint_vecs, is_tags, scores, gt_matrices, _ = data[data_num][0]
+
                 match_matrix = gt_matrices[0]
 
                 match_scores = model(box_features, keypoint_vecs, is_tags, scores)
@@ -94,14 +98,14 @@ def train(opt):
                         raise RuntimeError('Only batch size 1 supported validate')
                     
                     box_features, keypoint_vecs, is_tags, scores, gt_matrices, _ = data[0][0]
-                    match_matrix, mask_matrix = gt_matrices
+                    match_matrix = gt_matrices[0]
 
                     match_scores = model(box_features, keypoint_vecs, is_tags, scores)
 
                     val_loss = get_loss(match_scores, match_matrix)
 
                     matches = extract_matches(match_scores, opt.match_thresh)
-                    precision, recall, f1_score = evaluate_matches(matches, match_matrix, mask_matrix)
+                    precision, recall, f1_score = evaluate_matches(matches, match_matrix)
 
                     precisions.append(precision)
                     recalls.append(recall)
@@ -127,13 +131,22 @@ def train(opt):
 
 
 
+SEG_MODEL_PATH = '/home/frc-ag-3/harry_ws/fruitlet_2023/labelling/segmentation/turk/mask_rcnn/mask_best.pth'
+TRAIN_DIR = './datasets/train'
+VAL_DIR = './datasets/val'
+SEG_DIR = './preprocess_data/pair_segmentations'
+IMAGES_DIR = './preprocess_data/pair_images'
+
 def parse_args():
     """Parse input arguments."""
     parser = argparse.ArgumentParser()
-    parser.add_argument('--annotations_dir', required=True)
-    parser.add_argument('--seg_dir', required=True)
-    parser.add_argument('--val_dir', required=True)
+    parser.add_argument('--annotations_dir', default=TRAIN_DIR)
+    parser.add_argument('--images_dir', default=IMAGES_DIR)
+    parser.add_argument('--seg_dir', default=SEG_DIR)
+    parser.add_argument('--val_dir', default=VAL_DIR)
+    parser.add_argument('--seg_model_path', default=SEG_MODEL_PATH)
     parser.add_argument('--params_path', default='./params/default_params.yml')
+
 
     parser.add_argument('--checkpoint_dir', default='./checkpoints')
 

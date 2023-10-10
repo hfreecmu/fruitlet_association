@@ -172,12 +172,11 @@ def extract_matches(scores, match_threshold):
     }
 
 #evaluate matches
-def evaluate_matches(matches, match_matrix, mask_matrix):
+def evaluate_matches(matches, match_matrix):
     indices0 = matches['matches0'].detach().cpu().numpy()
     indices1 = matches['matches1'].detach().cpu().numpy()
 
     match_matrix = match_matrix.detach().cpu().numpy()
-    mask_matrix = mask_matrix.detach().cpu().numpy()
 
     pos_match_inds = np.argwhere(match_matrix[0:-1, 0:-1] > 0)
     #neg_row_inds = np.argwhere(match_matrix[0:-1, -1] > 0)
@@ -193,9 +192,6 @@ def evaluate_matches(matches, match_matrix, mask_matrix):
         if col == -1:
             continue
 
-        if mask_matrix[row, col] == 0:
-            continue
-        
         if indices1[col] != row:
             raise RuntimeError('Why here, should not happen')
 
@@ -215,9 +211,6 @@ def evaluate_matches(matches, match_matrix, mask_matrix):
     rec_tp = 0
     rec_fn = 0
     for row, col in pos_match_inds:
-        if mask_matrix[row, col] == 0:
-            continue
-
         if indices0[row] == col:
             if indices1[col] != row:
                 raise RuntimeError('Why here, should not happen')
@@ -238,7 +231,7 @@ def evaluate_matches(matches, match_matrix, mask_matrix):
     
     return precision, recall, f1_score
 
-def vis_matches(matches, match_matrix, mask_matrix, image_0_path, image_1_path, 
+def vis_matches(matches, match_matrix, image_0_path, image_1_path, 
                 gt_centers_0, gt_centers_1, vis_thickness, output_path):
     
     im_0 = cv2.imread(image_0_path)
@@ -252,16 +245,12 @@ def vis_matches(matches, match_matrix, mask_matrix, image_0_path, image_1_path,
     #indices1 = matches['matches1'].detach().cpu().numpy()
 
     match_matrix = match_matrix.detach().cpu().numpy()
-    mask_matrix = mask_matrix.detach().cpu().numpy()
 
     for row in range(indices0.shape[0]):
         if indices0[row] == -1:
             continue
 
         col = indices0[row]
-
-        if mask_matrix[row, col] == 0:
-            continue
 
         if match_matrix[row, col] == 1.0:
             color = [0, 255, 0]

@@ -3,7 +3,7 @@ import torch
 from torch.utils.data import DataLoader, Dataset
 import torchvision.transforms as T
 import numpy as np
-from utils.utils import read_dict, read_pickle, create_cfg, read_pickle, write_pickle
+from utils.utils import read_dict, create_cfg, read_pickle
 import cv2
 from models.feature_predictor import FeaturePredictor
 from detectron2.structures import Boxes
@@ -16,8 +16,10 @@ from pupil_apriltags import Detector as AprilTagDetector
 
 #TODO augment we are missing from original is rand_remove_assoc because we do not have that concept
 
-SEG_MODEL_PATH='/home/frc-ag-3/harry_ws/fruitlet_2023/labelling/segmentation/turk/mask_rcnn/mask_best.pth'
-#DUMP_DIR='/home/frc-ag-3/harry_ws/fruitlet_2023/scripts/inhand/fruitlet_association/datasets/DUMMY'
+ROW_MEAN = 539.5
+ROW_STD  = 311.76901171647364
+COL_MEAN = 719.5
+COL_STD = 415.69209358209673
 
 def detect_aprilttag(detector, im_path, tag_id):
     im = cv2.imread(im_path)
@@ -67,6 +69,10 @@ def merge_annotations(box_annotations, box_segmentations, tag_corners, tag_seg_i
         box_annotation = box_annotations[i]
         box_seg_inds = box_segmentations[i]
 
+        #skip ignored boxes
+        if box_annotation["assoc_id"] == -1:
+            continue
+
         annotations.append({
             "x0": box_annotation["x0"],
             "x1": box_annotation["x1"],
@@ -81,14 +87,6 @@ def merge_annotations(box_annotations, box_segmentations, tag_corners, tag_seg_i
         segmentations.append(box_seg_inds)
     
     return annotations, segmentations
-
-def get_basenames(joint_basenmane):
-    splits = joint_basenmane.replace('.json', '').split('_')
-
-    basename_0 = '_'.join(splits[0:4])
-    basename_1 = '_'.join(splits[4:8])
-
-    return basename_0, basename_1
 
 def get_boxes(annotations, segmentations, augment, 
               width, height, resize, file_id, 
@@ -114,8 +112,8 @@ def get_boxes(annotations, segmentations, augment,
     #get normalized rows and cols
     #TODO could be done once
     rows, cols = np.meshgrid(np.arange(height), np.arange(width), indexing='ij')
-    rows = 2*(rows / rows.max()) - 1
-    cols = 2*(cols / cols.max()) - 1
+    rows = (rows - ROW_MEAN) / ROW_STD
+    cols = (cols - COL_MEAN) / COL_STD
 
     #augment by shuffling inds
     if augment:
@@ -127,10 +125,10 @@ def get_boxes(annotations, segmentations, augment,
         annotation = annotations[i]
         seg_inds = segmentations[i]
 
-        x0 = int(np.round(annotation["x0"]))
-        y0 = int(np.round(annotation["y0"]))
-        x1 = int(np.round(annotation["x1"]))
-        y1 = int(np.round(annotation["y1"]))
+        x0 = annotation["x0"]
+        y0 = annotation["y0"]
+        x1 = annotation["x1"]
+        y1 = annotation["y1"]
         is_tag = annotation["is_tag"]
         score = annotation["score"]
         assoc_id = annotation["assoc_id"]
@@ -198,9 +196,9 @@ def get_boxes(annotations, segmentations, augment,
         #create keypoint vector of
         #rows, columns, segmentations
         #TODO are y1 and x1 inclusive or exclusive throghout this?
-        box_rows = rows[y0:y1, x0:x1]
-        box_cols = cols[y0:y1, x0:x1]
-        box_seg = box_seg_im[y0:y1, x0:x1]
+        box_rows = rows[int(y0):int(y1), int(x0):int(x1)]
+        box_cols = cols[int(y0):int(y1), int(x0):int(x1)]
+        box_seg = box_seg_im[int(y0):int(y1), int(x0):int(x1)]
 
         keypoint_vec = np.stack([box_rows, box_cols, box_seg])
         keypoint_vec = torch.from_numpy(keypoint_vec).float()
@@ -213,7 +211,12 @@ def get_boxes(annotations, segmentations, augment,
         scores.append(score)
         gt_centers.append(((y0 + y1)/2, (x0 + x1)/2))
 
-        if assoc_id >= 0:
+        if is_tag:
+            if 'tag_ind' in assoc_dict:
+                raise RuntimeError('Dup tag')
+
+            assoc_dict['tag_ind'] = len(is_tags) - 1
+        elif assoc_id >= 0:
             if assoc_id in assoc_dict["matches"]:
                 raise RuntimeError('assoc_id appeared twice. debug: ' + file_id)
             
@@ -221,13 +224,8 @@ def get_boxes(annotations, segmentations, augment,
         elif assoc_dict == -2:
             assoc_dict["non_matches"].append(len(is_tags) - 1)
         else:
+            #raise RuntimeError('unmatched should not happen')
             assoc_dict["unmatched"].append(len(is_tags) - 1)
-
-        if is_tag:
-            if 'tag_ind' in assoc_dict:
-                raise RuntimeError('Dup tag')
-
-            assoc_dict['tag_ind'] = len(is_tags) - 1
 
 
     assoc_dict['num_dets'] = len(is_tags)
@@ -256,65 +254,61 @@ def get_feature_vecs(boxes, im, feature_predictor, device, feature_dict):
 
     return box_features.to('cpu')
 
-def get_assoc_matrix(assoc_dict_0, assoc_dict_1, basename):
+def get_assoc_matrix(assoc_dict_0, assoc_dict_1, basename, augment):
     num_dets_0 = assoc_dict_0['num_dets']
     num_dets_1 = assoc_dict_1['num_dets']
 
     match_matrix = np.zeros((num_dets_0 + 1, num_dets_1 + 1))
-    mask_matrix = np.ones((num_dets_0 + 1, num_dets_1 + 1))
 
     matches_0 = assoc_dict_0['matches']
     matches_1 = assoc_dict_1['matches']
 
-    for row in assoc_dict_0['unmatched']:
-        mask_matrix[row, :] = 0
-
-    for col in assoc_dict_1['unmatched']:
-        mask_matrix[:, col] = 0
-
     #taking this out for augment
-    # if not len(matches_0) == len(matches_1):
-    #     raise RuntimeError('Invalid match size, debug needed: ' + basename)
+    if (not augment) and (not len(matches_0) == len(matches_1)):
+        raise RuntimeError('Invalid match size, debug needed ' + basename)
     
     for assoc_id in matches_0:
         if not assoc_id in matches_1:
-            #taking this out for augment
+            if not augment:
+                #taking this out for augment
+                #continue
+                raise RuntimeError('Mismatch assoc_id, debug needed: ' + basename)
+            row = matches_0[assoc_id]
+            match_matrix[row, -1] = 1.0
             continue
-            #raise RuntimeError('Mismatch assoc_id, debug needed: ' + basename)
         
         row = matches_0[assoc_id]
         col = matches_1[assoc_id]
 
         match_matrix[row, col] = 1.0
-        mask_matrix[row, :] = 1.0
-        mask_matrix[:, col] = 1.0
+
+    if augment:
+        for assoc_id in matches_1:
+            if not assoc_id in matches_0:
+                col = matches_1[assoc_id]
+                match_matrix[-1, col] = 1.0
+        
 
     for row in assoc_dict_0['non_matches']:
         match_matrix[row, -1] = 1.0
-        mask_matrix[row, :] = 1.0
 
     for col in assoc_dict_1['non_matches']:
         match_matrix[-1, col] = 1.0
-        mask_matrix[:, col] = 1.0
     
     #now do tag
     if 'tag_ind' in assoc_dict_0 and 'tag_ind' in assoc_dict_1:
         row_tag_ind = assoc_dict_0['tag_ind']
         col_tag_ind = assoc_dict_1['tag_ind']
         match_matrix[row_tag_ind, col_tag_ind] = 1.0
-        mask_matrix[row, :] = 1.0
-        mask_matrix[:, col] = 1.0
-    elif 'tag_ind' in assoc_dict_0:
-        row_tag_ind = assoc_dict_0['tag_ind']
-        match_matrix[row_tag_ind, -1] = 1.0
-        mask_matrix[row, :] = 1.0
-    elif 'tag_ind' in assoc_dict_1:
-        col_tag_ind = assoc_dict_1['tag_ind']
-        match_matrix[-1, col_tag_ind] = 1.0
-        mask_matrix[:, col] = 1.0
-
-
-    return match_matrix, mask_matrix
+    else:
+        raise RuntimeError('no tag ind?')
+    # elif 'tag_ind' in assoc_dict_0:
+    #     row_tag_ind = assoc_dict_0['tag_ind']
+    #     match_matrix[row_tag_ind, -1] = 1.0
+    # elif 'tag_ind' in assoc_dict_1:
+    #     col_tag_ind = assoc_dict_1['tag_ind']
+    #     match_matrix[-1, col_tag_ind] = 1.0
+    return match_matrix
 
 def rand_flip(descs_0, descs_1, kpts_0, kpts_1):
     rand_var = np.random.uniform()
@@ -323,16 +317,9 @@ def rand_flip(descs_0, descs_1, kpts_0, kpts_1):
         descs_0 = torch.fliplr(descs_0)
         descs_1 = torch.fliplr(descs_1)
 
-        #keypoints for rows unaffected
-
-        #keypoints, for columns we normally would do width - x ...
-        #BUT because cols are between -1 and 1, we just negate it
-        kpts_0[:, 1, :, :] = -kpts_0[:, 1, :, :]
-        kpts_1[:, 1, :, :] = -kpts_1[:, 1, :, :]
-
-        #box segmentations are also flipped left and right
-        kpts_0[:, 2:3] = torch.fliplr(kpts_0[:, 2:3])
-        kpts_1[:, 2:3] = torch.fliplr(kpts_1[:, 2:3])
+        #keypoints we can also flip
+        kpts_0 = torch.fliplr(kpts_0)
+        kpts_1 = torch.fliplr(kpts_1)
 
     return descs_0, descs_1, kpts_0, kpts_1
 
@@ -346,11 +333,14 @@ def warp_points(points, H):
     return perspective_points
 
 class AssociationDataset(Dataset):
-    def __init__(self, annotatons_dir, segmentations_dir, augment,
-                 width=1440, height=1080, resize_size=128, score_thresh=0.4,
-                 model_path=SEG_MODEL_PATH, device='cuda'):
+    def __init__(self, annotatons_dir, segmentations_dir, 
+                 images_dir, model_path,
+                 augment, device,
+                 width=1440, height=1080, resize_size=128, score_thresh=0.4):
+        
         self.annotation_paths = self.get_paths(annotatons_dir)
         self.segmentations_dir = segmentations_dir
+        self.images_dir = images_dir
         self.augment = augment
         self.width = width
         self.height = height
@@ -379,12 +369,14 @@ class AssociationDataset(Dataset):
         annotation_path = self.annotation_paths[idx]
         pair_annotations = read_dict(annotation_path)
 
-        image_0_path = pair_annotations['image_0']
-        image_1_path = pair_annotations['image_1']
+        basename_0 = os.path.basename(pair_annotations['image_0']).replace('.png', '')
+        basename_1 = os.path.basename(pair_annotations['image_1']).replace('.png', '')
+
+        image_0_path = os.path.join(self.images_dir, basename_0 + '.png')
+        image_1_path = os.path.join(self.images_dir, basename_1 + '.png')
         annotations_0 = pair_annotations['annotations_0']
         annotations_1 = pair_annotations['annotations_1']
 
-        basename_0, basename_1 = get_basenames(os.path.basename(annotation_path))
         seg_0_path = os.path.join(self.segmentations_dir, basename_0 + '.pkl')
         seg_1_path = os.path.join(self.segmentations_dir, basename_1 + '.pkl')
         segmentations_0 = read_pickle(seg_0_path)
@@ -426,16 +418,16 @@ class AssociationDataset(Dataset):
 
         boxes_0, is_tags_0, keypoint_vecs_0, scores_0, detection_indeces_0, gt_centers_0, assoc_dict_0 = get_boxes(annotations_0, segmentations_0, self.augment, 
                                                                                                          self.width, self.height, 
-                                                                                                         self.resize, basename_0, self.score_thresh)
+                                                                                                         self.resize, '_'.join([basename_0, basename_1]), self.score_thresh)
         boxes_1, is_tags_1, keypoint_vecs_1, scores_1, detection_indeces_1, gt_centers_1, assoc_dict_1 = get_boxes(annotations_1, segmentations_1, self.augment, 
                                                                                                          self.width, self.height, 
-                                                                                                         self.resize, basename_1, self.score_thresh)
+                                                                                                         self.resize, '_'.join([basename_0, basename_1]), self.score_thresh)
         box_features_0 = get_feature_vecs(boxes_0, image_0, self.feature_predictor, self.device, self.feature_dict) 
         box_features_1 = get_feature_vecs(boxes_1, image_1, self.feature_predictor, self.device, self.feature_dict) 
 
-        match_matrix, mask_matrix = get_assoc_matrix(assoc_dict_0, assoc_dict_1, os.path.basename(annotation_path))
+        match_matrix = get_assoc_matrix(assoc_dict_0, assoc_dict_1, '_'.join([basename_0, basename_1]), self.augment)
+
         match_matrix = torch.from_numpy(match_matrix).float()
-        mask_matrix = torch.from_numpy(mask_matrix).float()
 
         if self.augment:
             #random flip
@@ -445,7 +437,7 @@ class AssociationDataset(Dataset):
         keypoint_vecs = (keypoint_vecs_0.to(self.device), keypoint_vecs_1.to(self.device))
         is_tags = (is_tags_0.to(self.device), is_tags_1.to(self.device))
         scores = (scores_0.to(self.device), scores_1.to(self.device))
-        gt_matrices = [match_matrix.to(self.device), mask_matrix.to(self.device)]
+        gt_matrices = [match_matrix.to(self.device)]
 
         #don't want loading if augmented / affined
         if self.augment:
@@ -588,9 +580,12 @@ def collate_fn(data):
     zipped = zip(data)
     return list(zipped)
 
-def get_data_loader(annotatons_dir, segmentations_dir, augment, 
-                    batch_size, shuffle):
-    dataset = AssociationDataset(annotatons_dir, segmentations_dir, augment)
+def get_data_loader(annotatons_dir, segmentations_dir, images_dir,
+                    model_path, 
+                    augment, batch_size, shuffle, device):
+    dataset = AssociationDataset(annotatons_dir, segmentations_dir, 
+                                 images_dir, model_path, 
+                                 augment, device)
     dloader = DataLoader(dataset=dataset, batch_size=batch_size, shuffle=shuffle, collate_fn=collate_fn)
 
     return dloader

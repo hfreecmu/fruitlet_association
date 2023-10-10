@@ -16,13 +16,48 @@ circule_radius = 2
 resize = True
 resize_scale = 1.8
 
+def get_pairs(pairs_path, image_dir, cluster_dir):
+    pairs = read_dict(pairs_path)
+    filtered_pairs = []
+
+    for pair in pairs:
+        tmp_path_0, tmp_path_1 = pair
+
+        basename_0 = get_new_basename(tmp_path_0).split('.png')[0]
+        basename_1 = get_new_basename(tmp_path_1).split('.png')[0]
+
+        image_path_0 = os.path.join(image_dir, basename_0 + '.png')
+        image_path_1 = os.path.join(image_dir, basename_1 + '.png')
+
+        clusters_path_0 = os.path.join(cluster_dir, basename_0 + '.json')
+        clusters_path_1 = os.path.join(cluster_dir, basename_1 + '.json')
+
+        if not os.path.exists(image_path_0):
+            continue
+
+        if not os.path.exists(image_path_1):
+            continue
+
+        if not os.path.exists(clusters_path_0):
+            continue
+
+        if not os.path.exists(clusters_path_1):
+            continue
+
+        filtered_pairs.append(pair)
+
+    return filtered_pairs
+
+
 class Annotate():
     def __init__(self, pairs_path, detections_path, image_dir, cluster_dir,
                  output_dir, save_default, shuffle):
-        self.pairs_path = pairs_path
+        
+        self.pairs = get_pairs(pairs_path, image_dir, cluster_dir)
+        
         self.detections = read_dict(detections_path)
         self.image_dir = image_dir
-        self.clsuter_dir = cluster_dir
+        self.cluster_dir = cluster_dir
         self.output_dir = output_dir
         self.save_default = save_default
         self.shuffle = shuffle
@@ -47,7 +82,7 @@ class Annotate():
         window.bind("<Button-1>", self.event_action_click)
         # get the pairs of jsons
         #already sorted
-        pairs = read_dict(self.pairs_path)
+        pairs = self.pairs
 
         if self.shuffle:
             random.shuffle(pairs)
@@ -75,8 +110,8 @@ class Annotate():
             annotations_0 = self.detections[os.path.basename(image_path_0)]
             annotations_1 = self.detections[os.path.basename(image_path_1)]
 
-            clusters_path_0 = os.path.join(self.clsuter_dir, basename_0 + '.json')
-            clusters_path_1 = os.path.join(self.clsuter_dir, basename_1 + '.json')
+            clusters_path_0 = os.path.join(self.cluster_dir, basename_0 + '.json')
+            clusters_path_1 = os.path.join(self.cluster_dir, basename_1 + '.json')
             clusters_0 = read_dict(clusters_path_0)
             clusters_1 = read_dict(clusters_path_1)
             colors_0 = distinctipy.get_colors(clusters_0['num_clusters'], rng=0)

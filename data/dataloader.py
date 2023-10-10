@@ -383,7 +383,7 @@ class AssociationDataset(Dataset):
         segmentations_1 = read_pickle(seg_1_path)
 
         tag_id_0 = int(basename_0.split('_')[0])
-        tag_id_1 = int(basename_0.split('_')[0])
+        tag_id_1 = int(basename_1.split('_')[0])
         if not tag_id_0 == tag_id_1:
             raise RuntimeError('tag_id mismatch')
 
@@ -394,10 +394,15 @@ class AssociationDataset(Dataset):
         annotations_0, segmentations_0 = merge_annotations(annotations_0, segmentations_0, corners_0, tag_seg_inds_0)
         annotations_1, segmentations_1 = merge_annotations(annotations_1, segmentations_1, corners_1, tag_seg_inds_1)
 
+        if (self.augment) and (np.random.uniform() < 0.5):
+            annotations_0, annotations_1 = annotations_1, annotations_0
+            segmentations_0, segmentations_1 = segmentations_1, segmentations_0
+            image_0_path, image_1_path = image_1_path, image_0_path
+
         image_0 = cv2.imread(image_0_path)
         image_1 = cv2.imread(image_1_path)
 
-        if self.augment:
+        if False and self.augment:
             if np.random.uniform() < 0.2:
                 if np.random.uniform() < 0.5:
                     image_0 = self.aug_brightness(image_0)

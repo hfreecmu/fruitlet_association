@@ -49,18 +49,18 @@ def merge_annotations(box_annotations, box_segmentations, tag_corners, tag_seg_i
     tag_y0 = np.min(tag_corners[:, 1])
     tag_y1 = np.max(tag_corners[:, 1])
 
-    annotations.append({
-        "x0": tag_x0,
-        "x1": tag_x1,
-        "y0": tag_y0,
-        "y1": tag_y1,
-        "is_tag": True,
-        "score": 0.99,
-        "assoc_id": -1,
-        "orig_index": -1
-    })
+    # annotations.append({
+    #     "x0": tag_x0,
+    #     "x1": tag_x1,
+    #     "y0": tag_y0,
+    #     "y1": tag_y1,
+    #     "is_tag": True,
+    #     "score": 0.99,
+    #     "assoc_id": -1,
+    #     "orig_index": -1
+    # })
 
-    segmentations.append(tag_seg_inds)
+    # segmentations.append(tag_seg_inds)
 
     if not len(box_annotations) == len(box_segmentations):
         raise RuntimeError('mismatch box annotations and box segmentations')
@@ -303,7 +303,8 @@ def get_assoc_matrix(assoc_dict_0, assoc_dict_1, basename, augment):
         col_tag_ind = assoc_dict_1['tag_ind']
         match_matrix[row_tag_ind, col_tag_ind] = 1.0
     else:
-        raise RuntimeError('no tag ind?')
+        pass
+        #raise RuntimeError('no tag ind?')
     # elif 'tag_ind' in assoc_dict_0:
     #     row_tag_ind = assoc_dict_0['tag_ind']
     #     match_matrix[row_tag_ind, -1] = 1.0

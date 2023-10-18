@@ -305,7 +305,7 @@ disparities_dir = '../preprocess_data/pair_disparities'
 #will have detections and cluster id
 output_dir = '../preprocess_data/pair_clusters'
 camera_info_dir = '../preprocess_data/camera_info'
-vis = False
+vis = True
 vis_dir = '../preprocess_data/debug_cluster'
 cloud_dir = '../preprocess_data/debug_clouds'
 num_vis = 100
@@ -328,7 +328,6 @@ assert max_node_dist <= max_node_dist_2
 # start
 image_dict = read_dict(det_json_path)
 vis_count = 0
-
 for basename in image_dict:
     image_path = os.path.join(image_dir, basename)
     disparity_path = os.path.join(disparities_dir, basename.replace('.png', '.npy'))
@@ -360,7 +359,7 @@ for basename in image_dict:
 
     #fist pass at clustering
     cluster_communities(centroids, indices, matched_indices, clusters,
-                        max_merge_dist)
+                        max_node_dist)
     
     if len(clusters) == 0:
         print('No clusters for: ' + basename)

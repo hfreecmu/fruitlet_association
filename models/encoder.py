@@ -50,7 +50,7 @@ class DescriptorEncoder(nn.Module):
             resnets.append(ResnetBlock(512, 512, relu=True, norm=norm, dropout=dropout))
         self.resnets = nn.Sequential(*resnets)
 
-        self.conv_out = conv(512, 511, relu=False, norm=None, dropout=False, kernel_size=4, stride=2)
+        self.conv_out = conv(512, 512, relu=False, norm=None, dropout=False, kernel_size=4, stride=2)
 
     def forward(self, x):
 
@@ -68,7 +68,7 @@ class KeypointEncoder(nn.Module):
         self.conv1 = conv(32, 64, relu=True, norm=norm, dropout=True, kernel_size=4, stride=2)
         self.conv2 = conv(64, 128, relu=True, norm=norm, dropout=True, kernel_size=4, stride=2)
         self.conv3 = conv(128, 256, relu=True, norm=norm, dropout = False, kernel_size=4, stride=2)
-        self.conv4 = conv(256, 511, relu=False, norm=None, dropout = False, kernel_size=4, stride=2, padding=1)
+        self.conv4 = conv(256, 512, relu=False, norm=None, dropout = False, kernel_size=4, stride=2, padding=1)
 
     def forward(self, x):
         x = self.conv0(x)

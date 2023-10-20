@@ -44,10 +44,10 @@ def merge_annotations(box_annotations, box_segmentations, tag_corners, tag_seg_i
     annotations = []
     segmentations = []
 
-    tag_x0 = np.min(tag_corners[:, 0])
-    tag_x1 = np.max(tag_corners[:, 0])
-    tag_y0 = np.min(tag_corners[:, 1])
-    tag_y1 = np.max(tag_corners[:, 1])
+    # tag_x0 = np.min(tag_corners[:, 0])
+    # tag_x1 = np.max(tag_corners[:, 0])
+    # tag_y0 = np.min(tag_corners[:, 1])
+    # tag_y1 = np.max(tag_corners[:, 1])
 
     # annotations.append({
     #     "x0": tag_x0,
@@ -299,6 +299,7 @@ def get_assoc_matrix(assoc_dict_0, assoc_dict_1, basename, augment):
     
     #now do tag
     if 'tag_ind' in assoc_dict_0 and 'tag_ind' in assoc_dict_1:
+        raise RuntimeError('no tags')
         row_tag_ind = assoc_dict_0['tag_ind']
         col_tag_ind = assoc_dict_1['tag_ind']
         match_matrix[row_tag_ind, col_tag_ind] = 1.0

@@ -317,7 +317,7 @@ min_area = 50
 max_node_dist = 0.036
 max_node_dist_2 = 0.05
 max_merge_dist = 0.05
-max_fruitlet_dist = 0.035
+max_fruitlet_dist = 0.04
 eig_z_thresh = 0.8
 eps=0.01
 
@@ -361,32 +361,31 @@ for basename in image_dict:
     cluster_communities(centroids, indices, matched_indices, clusters,
                         max_node_dist)
     
-    if len(clusters) == 0:
-        print('No clusters for: ' + basename)
-        continue
+    if len(clusters) > 0:
+        cluster_centroids = get_cluster_centroids(clusters, centroids)
 
-    cluster_centroids = get_cluster_centroids(clusters, centroids)
-
-    #merge clusters
-    merge_clusters(clusters, cluster_centroids, centroids,
-                   max_merge_dist)
+        #merge clusters
+        merge_clusters(clusters, cluster_centroids, centroids,
+                       max_merge_dist)
     
     
     #second pass at clustering
     cluster_communities(centroids, indices, matched_indices, clusters,
                         max_node_dist_2)
     
-    cluster_centroids = get_cluster_centroids(clusters, centroids)
+    if len(clusters) > 0:
+        cluster_centroids = get_cluster_centroids(clusters, centroids)
 
-    #second pass at merging
-    merge_clusters(clusters, cluster_centroids, centroids, max_merge_dist)
+        #second pass at merging
+        merge_clusters(clusters, cluster_centroids, centroids, max_merge_dist)
 
-    #lastly singles
-    add_single(clusters, cluster_centroids, centroids, indices, 
-               matched_indices, max_fruitlet_dist)
+    if len(clusters) > 0:
+        #lastly singles
+        add_single(clusters, cluster_centroids, centroids, indices, 
+                   matched_indices, max_fruitlet_dist)
     
-    #don't think I need this but just in case
-    cluster_centroids = get_cluster_centroids(clusters, centroids)
+        #don't think I need this but just in case
+        cluster_centroids = get_cluster_centroids(clusters, centroids)
 
     if (vis) and (vis_count < num_vis):
         vis_count += 1 

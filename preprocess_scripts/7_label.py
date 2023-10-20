@@ -7,7 +7,7 @@ import numpy as np
 import distinctipy
 from inhand_utils import read_dict, write_dict, get_new_basename
 #random.seed(3)
-random.seed(1)
+random.seed(7)
 
 width = 1440
 height = 1080

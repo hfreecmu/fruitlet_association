@@ -5,7 +5,7 @@ import shutil
 input_dir = '../preprocess_data/pair_annotations'
 train_pct = 0.7
 val_pct = 0.15
-output_dir = '..//datasets'
+output_dir = '../datasets'
 
 train_dir = os.path.join(output_dir, 'train')
 val_dir = os.path.join(output_dir, 'val')

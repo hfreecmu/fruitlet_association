@@ -341,9 +341,9 @@ class Associator(nn.Module):
         descs_1 = descs_1 + kpts_1
 
         #descs_0 = torch.concatenate([descs_0, is_tags_0.unsqueeze(-1), scores_0.unsqueeze(-1)], dim=1)
-        descs_0 = torch.concatenate([descs_0, is_tags_0.unsqueeze(-1)], dim=1)
+        #descs_0 = torch.concatenate([descs_0, is_tags_0.unsqueeze(-1)], dim=1)
         #descs_1 = torch.concatenate([descs_1, is_tags_1.unsqueeze(-1), scores_1.unsqueeze(-1)], dim=1)
-        descs_1 = torch.concatenate([descs_1, is_tags_1.unsqueeze(-1)], dim=1)
+        #descs_1 = torch.concatenate([descs_1, is_tags_1.unsqueeze(-1)], dim=1)
 
         descs_0, descs_1 = self.gnn(descs_0.unsqueeze(0), descs_1.unsqueeze(0))
 

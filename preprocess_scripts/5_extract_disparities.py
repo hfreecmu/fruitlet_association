@@ -104,12 +104,12 @@ left_str = 'LEFT'
 right_str = 'RIGHT'
 
 # model_file = '/home/frc-ag-3/harry_ws/viewpoint_planning/segment_exp/src/fruitlet_disparity/models/raftstereo-realtime.pth'
-model_file = '/home/frc-ag-3/harry_ws/viewpoint_planning/segment_exp/src/fruitlet_disparity/models/iraftstereo_rvc.pth'
-#model_file = '/home/frc-ag-3/harry_ws/viewpoint_planning/segment_exp/src/fruitlet_disparity/models/raftstereo-middlebury.pth'
+#model_file = '/home/frc-ag-3/harry_ws/viewpoint_planning/segment_exp/src/fruitlet_disparity/models/iraftstereo_rvc.pth'
+model_file = '/home/frc-ag-3/harry_ws/viewpoint_planning/segment_exp/src/fruitlet_disparity/models/raftstereo-middlebury.pth'
 
 # raft_args = get_fast_model_args(model_file)
-raft_args = get_irvc_model_args(model_file)
-#raft_args = get_middle_model_args(model_file)
+#raft_args = get_irvc_model_args(model_file)
+raft_args = get_middle_model_args(model_file)
 
 #start
 raft_model = load_raft_model(raft_args)

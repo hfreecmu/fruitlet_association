@@ -36,29 +36,37 @@ def process_cloud(segmentations, points, colors,
         filt_points = points[filt_seg_inds[:, 0], filt_seg_inds[:, 1]]
         filt_colors = colors[filt_seg_inds[:, 0], filt_seg_inds[:, 1]]
 
-        clustering = DBSCAN(eps=eps, min_samples=min_area).fit(filt_points)
+        # clustering = DBSCAN(eps=eps, min_samples=min_area).fit(filt_points)
 
-        labels = clustering.labels_
-        max_cluster_area = -1
-        max_label_inds = None
-        for label_id in np.unique(labels):
-            if label_id == -1:
-                continue
+        # labels = clustering.labels_
+        # max_cluster_area = -1
+        # max_label_inds = None
+        # for label_id in np.unique(labels):
+        #     if label_id == -1:
+        #         continue
 
-            label_inds = np.argwhere(labels == label_id)
-            num_labels = label_inds.shape[0]
-            if num_labels > max_cluster_area:
-                max_cluster_area = num_labels
-                max_label_inds = label_inds
+        #     label_inds = np.argwhere(labels == label_id)
+        #     num_labels = label_inds.shape[0]
+        #     if num_labels > max_cluster_area:
+        #         max_cluster_area = num_labels
+        #         max_label_inds = label_inds
         
-        if max_label_inds is None:
-            continue
+        # if max_label_inds is None:
+        #     continue
 
-        if max_cluster_area < min_area:
-            continue
+        # if max_cluster_area < min_area:
+        #     continue
 
-        filt_points = filt_points[max_label_inds[:, 0]]
-        filt_colors = filt_colors[max_label_inds[:, 0]]
+        # filt_points = filt_points[max_label_inds[:, 0]]
+        # filt_colors = filt_colors[max_label_inds[:, 0]]
+
+        med_vals = np.median(filt_points, axis=0)
+        med_dists = np.linalg.norm(filt_points - med_vals, axis=1)
+        filt_points = filt_points[med_dists <= 2*eps]
+        filt_colors = filt_colors[med_dists <= 2*eps]
+
+        if filt_points.shape[0] < min_area:
+            continue
 
         pca = PCA(n_components=3)
         _ = pca.fit_transform(filt_points)

@@ -13,10 +13,10 @@ warnings.filterwarnings("ignore")
 
 def infer(opt):
     #get dataloader
-    dataloader = get_data_loader(opt.annotations_dir, opt.seg_dir,
-                                 opt.images_dir, opt.seg_model_path,
-                                 False, 1, False,
-                                 opt.device)
+    dataloader = get_data_loader(opt.annotations_dir,
+                                 opt.images_dir,
+                                 1, False,
+                                 opt.device, False)
     #
 
     #load model
@@ -26,7 +26,7 @@ def infer(opt):
     model.eval()
     #
 
-    mts = np.arange(1, 7)*0.1
+    mts = np.arange(5, 15)*0.01
     #TODO should these be averaged or total
     precisions = [None]*len(mts)
     recalls = [None]*len(mts)
@@ -37,10 +37,13 @@ def infer(opt):
             if not len(data) == 1:
                 raise RuntimeError('Only batch size 1 supported in test')
             
-            box_features, keypoint_vecs, is_tags, scores, gt_matrices, gt_vis = data[0][0]
+            box_centroids, box_ims, gt_matrices, gt_vis = data[0][0]
             match_matrix = gt_matrices[0]
 
-            match_scores = model(box_features, keypoint_vecs, is_tags, scores)
+            gt_centers_0 = box_centroids[0].cpu().numpy()
+            gt_centers_1 = box_centroids[1].cpu().numpy()
+
+            match_scores = model(box_centroids, box_ims)
 
             for mt_ind in range(len(mts)):
                 mt = mts[mt_ind]
@@ -56,7 +59,7 @@ def infer(opt):
                 f1_scores[mt_ind].append(f1_score)
 
                 if mt == opt.vis_mt:
-                    _, _, gt_centers_0, gt_centers_1, image_0_path, image_1_path, basename = gt_vis
+                    _, _, image_0_path, image_1_path, basename = gt_vis
 
                     output_path = os.path.join(opt.vis_dir, basename.replace('.json', '.png'))
                     vis_matches(matches, match_matrix, image_0_path, image_1_path, 
@@ -70,14 +73,13 @@ def infer(opt):
     plot_metrics(opt.vis_dir, precisions, recalls, f1_scores, mts)
 
 SEG_MODEL_PATH = '/home/frc-ag-3/harry_ws/fruitlet_2023/labelling/segmentation/turk/mask_rcnn/mask_best.pth'
-TRAIN_DIR = './datasets/test'
-VAL_DIR = './datasets/val'
+TEST_DIR = './datasets/test'
 SEG_DIR = './preprocess_data/pair_segmentations'
 IMAGES_DIR = './preprocess_data/pair_images'
 def parse_args():
     """Parse input arguments."""
     parser = argparse.ArgumentParser()
-    parser.add_argument('--annotations_dir', default=TRAIN_DIR)
+    parser.add_argument('--annotations_dir', default=TEST_DIR)
     parser.add_argument('--images_dir', default=IMAGES_DIR)
     parser.add_argument('--seg_dir', default=SEG_DIR)
     parser.add_argument('--seg_model_path', default=SEG_MODEL_PATH)
@@ -88,7 +90,7 @@ def parse_args():
 
     parser.add_argument('--vis_dir', default='./vis')
     parser.add_argument('--vis_thickness', type=int, default=2)
-    parser.add_argument('--vis_mt', type=float, default=0.4)
+    parser.add_argument('--vis_mt', type=float, default=0.1)
 
     parser.add_argument('--device', default='cuda')
     

@@ -19,14 +19,15 @@ torch.backends.cudnn.enabled = False
 
 def train(opt):
     #get dataloaders
-    train_dataloader = get_data_loader(opt.annotations_dir, opt.seg_dir,
-                                       opt.images_dir, opt.seg_model_path,
-                                       True, opt.batch_size, opt.shuffle,
-                                       opt.device)
-    val_dataloader = get_data_loader(opt.val_dir, opt.seg_dir,
-                                     opt.images_dir, opt.seg_model_path,
-                                     False, 1, False, opt.device)
-    #
+    train_dataloader = get_data_loader(opt.annotations_dir,
+                                       opt.images_dir,
+                                       opt.batch_size, opt.shuffle,
+                                       opt.device, True)
+    
+    val_dataloader = get_data_loader(opt.val_dir,
+                                     opt.images_dir,
+                                     1, False, opt.device, False)
+    
 
     #load model
     model_params = read_model_params(opt.params_path)
@@ -56,11 +57,11 @@ def train(opt):
             loss = []
             optimizer.zero_grad()
             for data_num in range(len(data)):
-                box_features, keypoint_vecs, is_tags, scores, gt_matrices, _ = data[data_num][0]
+                box_centroids, box_ims, gt_matrices, _ = data[data_num][0]
 
                 match_matrix = gt_matrices[0]
 
-                match_scores = model(box_features, keypoint_vecs, is_tags, scores)
+                match_scores = model(box_centroids, box_ims)
 
                 assoc_loss = get_loss(match_scores, match_matrix)
 
@@ -97,10 +98,10 @@ def train(opt):
                     if not len(data) == 1:
                         raise RuntimeError('Only batch size 1 supported validate')
                     
-                    box_features, keypoint_vecs, is_tags, scores, gt_matrices, _ = data[0][0]
+                    box_centroids, box_ims, gt_matrices, _ = data[0][0]
                     match_matrix = gt_matrices[0]
 
-                    match_scores = model(box_features, keypoint_vecs, is_tags, scores)
+                    match_scores = model(box_centroids, box_ims)
 
                     val_loss = get_loss(match_scores, match_matrix)
 
@@ -151,14 +152,14 @@ def parse_args():
     parser.add_argument('--checkpoint_dir', default='./checkpoints')
 
     parser.add_argument('--num_epochs', type=int, default=200)
-    parser.add_argument('--milestones', type=list, default=[20, 50, 100])
+    parser.add_argument('--milestones', type=list, default=[50, 100])
     parser.add_argument('--batch_size', type=int, default=8)
     parser.add_argument('--lr', type=float, default=1e-4)
     parser.add_argument('--weight_decay', type=float, default=1e-4)
     parser.add_argument('--gamma', type=float, default=0.1)
 
     parser.add_argument('--log_steps', type=int, default=10)
-    parser.add_argument('--match_thresh', type=float, default=0.5)
+    parser.add_argument('--match_thresh', type=float, default=0.1)
 
     parser.add_argument('--shuffle', action='store_false')
     parser.add_argument('--device', default='cuda')

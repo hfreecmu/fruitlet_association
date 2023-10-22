@@ -242,6 +242,7 @@ def vis_matches(matches, match_matrix, image_0_path, image_1_path,
     comb_im[:, im_0.shape[1]:] = im_1
 
     indices0 = matches['matches0'].detach().cpu().numpy()
+
     #indices1 = matches['matches1'].detach().cpu().numpy()
 
     match_matrix = match_matrix.detach().cpu().numpy()

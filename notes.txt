@@ -1,0 +1,1 @@
+I removed the data in preprocess_data because I don't plan on using this repository anymore AND all of the data should be saved in the json. I can always run the files in preprocess_scripts to re-create. I also don't trust the annotations I made.
